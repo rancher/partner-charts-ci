@@ -112,7 +112,7 @@ git push origin main-source
 7. Push your commit and open a pull request
 
 ```bash
-git clone -b main-source git@github.com:samuelattwood/partner-charts.git
+git clone -b main-source git@github.com:rancher/partner-charts.git
 cd partner-charts
 mkdir -p packages/suse/kubewarden-controller
 cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
@@ -141,7 +141,7 @@ If you would like to test your configuration using this tool, simply run the pro
 
 The example below assumes we have already committed an **upstream.yaml** to **packages/suse/kubewarden-controller/upstream.yaml**
 ```bash
-git clone -b main-source git@github.com:samuelattwood/partner-charts.git
+git clone -b main-source git@github.com:rancher/partner-charts.git
 cd partner-charts
 scripts/pull-ci-scripts
 export PACKAGE=suse/kubewarden-controller

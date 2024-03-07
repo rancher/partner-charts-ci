@@ -1,4 +1,4 @@
-module github.com/samuelattwood/partner-charts-ci
+module github.com/rancher/partner-charts-ci
 
 go 1.20
 
