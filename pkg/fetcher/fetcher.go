@@ -15,7 +15,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/google/go-github/v53/github"
-	"github.com/samuelattwood/partner-charts-ci/pkg/parse"
+	"github.com/rancher/partner-charts-ci/pkg/parse"
 	"github.com/sirupsen/logrus"
 
 	"helm.sh/helm/v3/pkg/chart"
