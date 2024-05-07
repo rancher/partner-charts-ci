@@ -15,6 +15,7 @@ import (
 	"github.com/rancher/charts-build-scripts/pkg/filesystem"
 	"github.com/rancher/partner-charts-ci/pkg/conform"
 	"github.com/rancher/partner-charts-ci/pkg/fetcher"
+	"github.com/rancher/partner-charts-ci/pkg/icons"
 	"github.com/rancher/partner-charts-ci/pkg/parse"
 	"github.com/rancher/partner-charts-ci/pkg/validate"
 	"github.com/sirupsen/logrus"
@@ -1198,7 +1199,7 @@ func generatePackageList(currentPackage string) PackageList {
 
 // Populates list of package wrappers, handles manual and automatic variation
 // If print, function will print information during processing
-func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, print bool, iconOverride bool) (PackageList, error) {
+func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, print bool) (PackageList, error) {
 	packageList := make(PackageList, 0)
 	for _, packageWrapper := range generatePackageList(currentPackage) {
 		packageWrapper.Annotations = make(map[string]string)
@@ -1224,7 +1225,7 @@ func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, 
 			}
 		}
 
-		if onlyUpdates && !updated && !iconOverride {
+		if onlyUpdates && !updated {
 			continue
 		}
 
@@ -1240,10 +1241,9 @@ func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, 
 // The upstream.yaml file will contain the icon field under ChartMetadata to be overriden in the index.yaml file later by the overrideIcons function.
 func downloadIcons(c *cli.Context) {
 	currentPackage := os.Getenv(packageEnvVariable)
-	iconOverride := true
 	icons.CheckFilesStructure() // stop execution if file structure is not correct
 
-	packageList, err := populatePackages(currentPackage, false, false, false, iconOverride)
+	packageList, err := populatePackages(currentPackage, false, false, false)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -1280,13 +1280,13 @@ func downloadIcons(c *cli.Context) {
 // It will only work if the downloadIcons function was previously executed at some point in time.
 // The function will not download the icons, it will only override the icon field in the index.yaml file.
 // Before overriding the icons, it will check if the necessary conditions are met at parsePackageListToPackageIconList() function, if not it will skip the package.
-func overrideIcons(c *cli.Context) {
+func overrideIcons() {
 	currentPackage := os.Getenv(packageEnvVariable)
 	iconOverride := true
 	icons.CheckFilesStructure() // stop execution if file structure is not correct
 
 	// populate all possible packages
-	packageList, err := populatePackages(currentPackage, false, false, false, iconOverride)
+	packageList, err := populatePackages(currentPackage, false, false, false)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -1356,19 +1356,22 @@ func overwriteIndexIconsAndTestChanges(packageIconList icons.PackageIconList) er
 	return icons.TestIconsAndIndexYaml(packageIconList, updatedHelmIndexFile)
 }
 
-// func generateChanges(genpatch bool, save bool, commit bool, onlyUpdates bool, print bool) {
-func generateChanges(auto bool, stage bool, iconOverride bool) {
+// generateChanges will generate the changes for the packages based on the flags provided
+// if auto or stage is true, it will write the index.yaml file if the chart has new updates
+// the charts to be modified depends on the populatePackages function and their update status
+// the changes will be applied on fetchUpstreams function
+func generateChanges(auto bool, stage bool, icons bool) {
 	currentPackage := os.Getenv(packageEnvVariable)
 	var packageList PackageList
 	var err error
-	if (auto || stage) && !iconOverride {
-		packageList, err = populatePackages(currentPackage, true, false, true, false)
+	if auto || stage {
+		packageList, err = populatePackages(currentPackage, true, false, true)
 		for i := range packageList {
 			packageList[i].GenPatch = true
 			packageList[i].Save = true
 		}
 	} else {
-		packageList, err = populatePackages(currentPackage, false, true, true, false)
+		packageList, err = populatePackages(currentPackage, false, true, true)
 	}
 	if err != nil {
 		logrus.Fatal(err)
@@ -1395,6 +1398,11 @@ func generateChanges(auto bool, stage bool, iconOverride bool) {
 			}
 		}
 	}
+
+	if auto && icons {
+		overrideIcons()
+	}
+
 }
 
 // CLI function call - Prints list of available packages to STDout
@@ -1420,7 +1428,7 @@ func listPackages(c *cli.Context) {
 // CLI function call - Generates patch files for package(s)
 func patchCharts(c *cli.Context) {
 	currentPackage := os.Getenv(packageEnvVariable)
-	packageList, err := populatePackages(currentPackage, false, false, true, false)
+	packageList, err := populatePackages(currentPackage, false, false, true)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -1451,7 +1459,7 @@ func addFeaturedChart(c *cli.Context) {
 		logrus.Fatalf("Package '%s' not available\n", featuredChart)
 	}
 
-	packageList, err = populatePackages(featuredChart, false, false, false, false)
+	packageList, err = populatePackages(featuredChart, false, false, false)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -1484,7 +1492,7 @@ func removeFeaturedChart(c *cli.Context) {
 		logrus.Fatalf("Package '%s' not available\n", featuredChart)
 	}
 
-	packageList, err := populatePackages(featuredChart, false, false, false, false)
+	packageList, err := populatePackages(featuredChart, false, false, false)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -1531,7 +1539,7 @@ func hideChart(c *cli.Context) {
 		logrus.Fatal("Provide package name(s) as argument")
 	}
 	for _, currentPackage := range c.Args() {
-		packageList, err := populatePackages(currentPackage, false, false, false, false)
+		packageList, err := populatePackages(currentPackage, false, false, false)
 		if err != nil {
 			logrus.Error(err)
 		}
@@ -1565,7 +1573,7 @@ func prepareCharts(c *cli.Context) {
 // Checking against upstream version, prepare, patch, clean, and index update
 // Does not commit
 func stageChanges(c *cli.Context) {
-	generateChanges(false, true, true)
+	generateChanges(false, true, false)
 }
 
 func unstageChanges(c *cli.Context) {
@@ -1577,7 +1585,8 @@ func unstageChanges(c *cli.Context) {
 
 // CLI function call - Generates automated commit
 func autoUpdate(c *cli.Context) {
-	generateChanges(true, false, true)
+	icons := c.Bool("icons")
+	generateChanges(true, false, icons)
 }
 
 // CLI function call - Validates repo against released
@@ -1718,6 +1727,12 @@ func main() {
 			Name:   "auto",
 			Usage:  "Generate and commit changes",
 			Action: autoUpdate,
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:  "icons",
+					Usage: "override icons in index.yaml if true",
+				},
+			},
 		},
 		{
 			Name:   "stage",
@@ -1759,11 +1774,6 @@ func main() {
 			Name:   "validate",
 			Usage:  "Check repo against released charts",
 			Action: validateRepo,
-		},
-		{
-			Name:   "override-icons",
-			Usage:  "Override icons from charts in index.yaml to avoid Rancher fetching the internet",
-			Action: overrideIcons,
 		},
 		{
 			Name:   "download-icons",

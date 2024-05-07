@@ -56,7 +56,7 @@ func DownloadFiles(entriesPathsAndIconsMap PackageIconMap) PackageIconMap {
 			logrus.Errorf("Failed to create/write file: %s", filePath)
 			continue
 		}
-
+		logrus.Infof("Downloaded logo and saved at: %s", filePath)
 		downloadedLogos[key] = ParsePackageToOverride(value.Name, value.Path, fmt.Sprintf("file://%s", filePath))
 	}
 	logrus.Info("Icons asset downloads finished")
