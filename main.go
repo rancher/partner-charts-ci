@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/go-git/go-git/v5"
@@ -957,6 +958,12 @@ func conformPackage(packageWrapper PackageWrapper) error {
 	return err
 }
 
+// getAssetFilename gets the filename for a helm chart as used
+// in an assets/<vendor> directory.
+func getAssetFilename(name, version string) string {
+	return fmt.Sprintf("%s-%s.tgz", name, version)
+}
+
 // Saves chart to disk as asset gzip and directory
 func saveChart(helmChart *chart.Chart, assetsPath, chartsPath string) error {
 
@@ -966,7 +973,7 @@ func saveChart(helmChart *chart.Chart, assetsPath, chartsPath string) error {
 		return err
 	}
 
-	assetFile := fmt.Sprintf("%s-%s.tgz", helmChart.Name(), helmChart.Metadata.Version)
+	assetFile := getAssetFilename(helmChart.Name(), helmChart.Metadata.Version)
 	assetFile = path.Join(assetsPath, assetFile)
 
 	err = conform.Gunzip(assetFile, chartsPath)
@@ -1679,6 +1686,61 @@ func validateRepo(c *cli.Context) {
 
 }
 
+func cullCharts(c *cli.Context) error {
+	// get the name of the chart to work on
+	chartName := c.Args().Get(0)
+
+	// parse days argument
+	rawDays := c.Args().Get(1)
+	daysInt64, err := strconv.ParseInt(rawDays, 10, strconv.IntSize)
+	if err != nil {
+		return fmt.Errorf("failed to convert %q to integer: %w", rawDays, err)
+	}
+	days := int(daysInt64)
+
+	// parse index.yaml
+	index, err := repo.LoadIndexFile(indexFile)
+	if err != nil {
+		return fmt.Errorf("failed to read index file: %w", err)
+	}
+
+	// try to find subjectPackage in index.yaml
+	packageVersions, ok := index.Entries[chartName]
+	if !ok {
+		return fmt.Errorf("chart %q not present in %s", chartName, indexFile)
+	}
+
+	// get charts that are newer and older than cutoff
+	now := time.Now()
+	cutoff := now.AddDate(0, 0, -days)
+	olderPackageVersions := make(repo.ChartVersions, 0, len(packageVersions))
+	newerPackageVersions := make(repo.ChartVersions, 0, len(packageVersions))
+	for _, packageVersion := range packageVersions {
+		if packageVersion.Created.After(cutoff) {
+			newerPackageVersions = append(newerPackageVersions, packageVersion)
+		} else {
+			olderPackageVersions = append(olderPackageVersions, packageVersion)
+		}
+	}
+
+	// remove old charts from assets directory
+	for _, olderPackageVersion := range olderPackageVersions {
+		for _, url := range olderPackageVersion.URLs {
+			if err := os.Remove(url); err != nil {
+				return fmt.Errorf("failed to remove %q: %w", url, err)
+			}
+		}
+	}
+
+	// modify index.yaml
+	index.Entries[chartName] = newerPackageVersions
+	if err := index.WriteFile(indexFile, 0o644); err != nil {
+		return fmt.Errorf("failed to write index file: %w", err)
+	}
+
+	return nil
+}
+
 func main() {
 	if len(os.Getenv("DEBUG")) > 0 {
 		logrus.SetLevel(logrus.DebugLevel)
@@ -1777,6 +1839,12 @@ func main() {
 			Name:   "download-icons",
 			Usage:  "Download icons from charts in index.yaml",
 			Action: downloadIcons,
+		},
+		{
+			Name:      "cull",
+			Usage:     "Remove versions of chart older than a number of days",
+			Action:    cullCharts,
+			ArgsUsage: "<chart> <days>",
 		},
 	}
 
