@@ -63,8 +63,8 @@ func CheckForOverrideConditions(packagePath string, iconURL string) bool {
 	return false
 }
 
-// ConvertYamlForIconOverride will change the metade icon URL to a local icon path for the index.yaml
-func ConvertYamlForIconOverride(helmIndexYaml *repo.IndexFile, packageIconList PackageIconList) {
+// OverrideIconValues will change the metade icon URL to a local icon path for the index.yaml
+func OverrideIconValues(helmIndexYaml *repo.IndexFile, packageIconList PackageIconList) {
 	for _, pkg := range packageIconList {
 		for _, pk := range helmIndexYaml.Entries[pkg.Name] {
 			pk.Metadata.Icon = pkg.Icon
@@ -72,9 +72,11 @@ func ConvertYamlForIconOverride(helmIndexYaml *repo.IndexFile, packageIconList P
 	}
 }
 
-// TestIconsAndIndexYaml will if Icons and IndexYaml have matching paths
-func TestIconsAndIndexYaml(packageIconList PackageIconList, helmIndexFile *repo.IndexFile) error {
+// ValidateIconsAndIndexYaml will if Icons and IndexYaml have matching paths
+func ValidateIconsAndIndexYaml(packageIconList PackageIconList, helmIndexFile *repo.IndexFile) error {
 	var err error
+	var scanErrors []error
+
 	for _, pkg := range packageIconList {
 		// Check if the icon has the correct path prefix
 		if !strings.HasPrefix(pkg.Icon, "file://") {
@@ -82,39 +84,42 @@ func TestIconsAndIndexYaml(packageIconList PackageIconList, helmIndexFile *repo.
 		}
 		iconPath := strings.TrimPrefix(pkg.Icon, "file://")
 		// Check if icon exists in the path
-		_, openIconErr := os.Stat(iconPath)
-		if os.IsNotExist(openIconErr) {
-			logrus.Errorf("Icon %s not found", pkg.Icon)
-			err = fmt.Errorf("icon (%s) not found - TestIconsAndIndexYaml", iconPath)
+		exist := Exists(iconPath)
+		if !exist {
+			logrus.Errorf("Icon not found; icon:%s ", pkg.Icon)
+			err = fmt.Errorf("icon not found: %s", iconPath)
+			scanErrors = append(scanErrors, err)
 		}
+
 		// Check if the icon path is the same as the index.yaml
-		ok := helmIndexFile.Entries[pkg.Name][0].Metadata.Icon == pkg.Icon
+		iconEntry := helmIndexFile.Entries[pkg.Name][0].Metadata.Icon
+		ok := iconEntry == pkg.Icon
 		if !ok {
-			logrus.Errorf("Package %s not found in index.yaml", pkg.Name)
-			err = fmt.Errorf("icon (%s) differ from index.yaml - TestIconsAndIndexYaml", pkg.Icon)
+			logrus.Errorf("icon differ from index.yaml entry; icon: %s ; entry: %s", pkg.Icon, iconEntry)
+			err = fmt.Errorf("icon differ from index.yaml entry; icon: %s ; entry: %s", pkg.Icon, iconEntry)
+			scanErrors = append(scanErrors, err)
 		}
-
 	}
 
-	if err != nil {
-		return err
+	if len(scanErrors) > 0 {
+		logrus.Fatalf("Errors found in ValidateIconsAndIndexYaml")
 	}
 
-	// Count present logos and logo entries in index yaml
-	presentLogoFiles, err := countLogoFilesInAssets()
-	presentLogoEntries := countLogoFilesInIndex(helmIndexFile)
+	// Count downloaded icons and icons entries in index yaml
+	downloadedIconFiles, err := countDownloadedIconFiles()
+	presentIconEntries := countIconEntriesInIndex(helmIndexFile)
 	if err != nil {
 		logrus.Errorf("Error reading assets/logos: %v", err)
 		return err
 	}
-	if presentLogoFiles != presentLogoEntries {
-		logrus.Errorf("Logo files in assets/logos: %d, Logo files in index.yaml: %d", presentLogoFiles, presentLogoEntries)
-		return fmt.Errorf("logo files in assets/logos and index.yaml do not match - TestIconsAndIndexYaml")
+	if downloadedIconFiles != presentIconEntries {
+		logrus.Errorf("Icon files in assets/logos: %d, Icon files in index.yaml: %d", downloadedIconFiles, presentIconEntries)
+		return fmt.Errorf("icon files in assets/logos and index.yaml do not match")
 	}
 	return err
 }
 
-func countLogoFilesInAssets() (int, error) {
+func countDownloadedIconFiles() (int, error) {
 	files, err := os.ReadDir("assets/logos")
 	if err != nil {
 		return 0, err
@@ -130,7 +135,7 @@ func countLogoFilesInAssets() (int, error) {
 	return count, nil
 }
 
-func countLogoFilesInIndex(helmIndexFile *repo.IndexFile) int {
+func countIconEntriesInIndex(helmIndexFile *repo.IndexFile) int {
 	var counter int
 	for _, entry := range helmIndexFile.Entries {
 		icon := entry[0].Metadata.Icon

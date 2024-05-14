@@ -10,12 +10,12 @@ import (
 
 // CreateOverrideUpstreamYamlMetadata will create a new or edit an existing upstream.yaml file
 // under packages/<chart>/upstream.yaml that will be used to overlay icons data on the index.yaml
-func CreateOverrideUpstreamYamlMetadata(downloadedLogos PackageIconMap) int {
+func CreateOverrideUpstreamYamlMetadata(downloadedIcons PackageIconMap) int {
 	logrus.Info("Starting to create upstream.yaml ChartMetadata - icon")
 	var counter int
-	for _, objIconOverride := range downloadedLogos {
+	for _, objIconOverride := range downloadedIcons {
 		upstreamFilePath := fmt.Sprintf("%s/upstream.yaml", objIconOverride.Path)
-		exists := checkUpstreamYamlFile(upstreamFilePath)
+		exists := Exists(upstreamFilePath)
 
 		if exists {
 			err := writeChartMetadata(upstreamFilePath, objIconOverride.Icon)
@@ -39,14 +39,6 @@ func CreateOverrideUpstreamYamlMetadata(downloadedLogos PackageIconMap) int {
 		}
 	}
 	return counter
-}
-
-func checkUpstreamYamlFile(upstreamFilePath string) bool {
-	// If exists write to it, if it does not exist create it
-	if _, err := os.Stat(upstreamFilePath); os.IsNotExist(err) {
-		return false
-	}
-	return true
 }
 
 func createUpstreamYaml(file string) error {

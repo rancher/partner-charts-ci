@@ -10,23 +10,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// DownloadFiles will download all available icons from chart in index.yaml at assets/logos and return the successfull downloaded files.
-// If the file is already downloaded, it will skip the download process but still save the PackageIcon to the map so it can be overriden later
+// DownloadFiles will download all available icons from chart in index.yaml at assets/logos and return the successfully downloaded files.
+// If the file is already downloaded, it will skip the download process but still save the PackageIcon to the map so it can be overridden later
 func DownloadFiles(entriesPathsAndIconsMap PackageIconMap) PackageIconMap {
 	var failedURLs map[string]string = make(map[string]string)
-	var downloadedLogos PackageIconMap = make(PackageIconMap)
+	var downloadedIcons PackageIconMap = make(PackageIconMap)
 
 	for key, value := range entriesPathsAndIconsMap {
-		url := value.Icon                                      // url coming in the icon field
-		filename := value.Name                                 // chart name from the index.yaml
-		ext := filepath.Ext(url)                               // file extension from the URL
-		filePath := partnerDownloadPath + "/" + filename + ext // file path to save the downloaded file
-
-		// Check if the file already exists and if exists, skip to the next file
-		if checkIfLogoAlreadyExists(filePath) {
-			downloadedLogos[key] = ParsePackageToOverride(value.Name, value.Path, fmt.Sprintf("file://%s", filePath))
-			continue
-		}
+		url := value.Icon        // url coming in the icon field
+		filename := value.Name   // chart name from the index.yaml
+		ext := filepath.Ext(url) // file extension from the URL
 
 		// GET Request for downloading the logo file
 		resp, err := http.Get(url)
@@ -46,30 +39,41 @@ func DownloadFiles(entriesPathsAndIconsMap PackageIconMap) PackageIconMap {
 				logrus.Errorf("Failed to detect file type for: %s", url)
 				continue
 			}
-			filePath = partnerDownloadPath + "/" + filename + ext
+		}
+
+		// file path to save the downloaded file
+		filePath := partnerDownloadPath + "/" + filename + ext
+		// Check if the file already exists and if exists, skip to the next file
+		if Exists(filePath) {
+			downloadedIcons[key] = ParsePackageToOverride(value.Name, value.Path, fmt.Sprintf("file://%s", filePath))
+			continue
 		}
 
 		// Create and save the logo file locally
-		err = saveLogoFile(filePath, resp.Body)
+		err = saveIconFile(filePath, resp.Body)
 		if err != nil {
 			failedURLs[filename] = url
 			logrus.Errorf("Failed to create/write file: %s", filePath)
 			continue
 		}
 		logrus.Infof("Downloaded logo and saved at: %s", filePath)
-		downloadedLogos[key] = ParsePackageToOverride(value.Name, value.Path, fmt.Sprintf("file://%s", filePath))
+		downloadedIcons[key] = ParsePackageToOverride(value.Name, value.Path, fmt.Sprintf("file://%s", filePath))
 	}
 	logrus.Info("Icons asset downloads finished")
-	return downloadedLogos
+	return downloadedIcons
 }
 
-func checkIfLogoAlreadyExists(filePath string) bool {
-	// Check if the file already exists and if exists, skip to the next file
-	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
-		logrus.Infof("Skipping... file already exists: %s", filePath)
-		return true // File already exists
+// Exists checks if the file already exists
+func Exists(filePath string) bool {
+	_, err := os.Stat(filePath)
+	if os.IsNotExist(err) {
+		return false // File do not exist
+	} else if err == nil {
+		return true // File exists
 	}
-	return false // File does not exist
+
+	logrus.Errorf("Error checking file: %s - error: %v", filePath, err)
+	return false // File might not exist
 }
 
 func detectMIMEType(body io.ReadCloser) string {
@@ -98,7 +102,7 @@ func detectMIMEType(body io.ReadCloser) string {
 	return fileType
 }
 
-func saveLogoFile(filePath string, body io.ReadCloser) error {
+func saveIconFile(filePath string, body io.ReadCloser) error {
 	// Create the file
 	out, err := os.Create(filePath)
 	if err != nil {

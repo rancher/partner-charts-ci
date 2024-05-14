@@ -1259,14 +1259,14 @@ func downloadIcons(c *cli.Context) {
 	}
 
 	// Download all logos or retrieve the ones already downloaded
-	downloadedLogos := icons.DownloadFiles(entriesPathsAndIconsMap)
+	downloadedIcons := icons.DownloadFiles(entriesPathsAndIconsMap)
 	// Create the upstream.yaml files with the icon field for override based on the downloaded logos
-	upstreamYamlCounter := icons.CreateOverrideUpstreamYamlMetadata(downloadedLogos)
+	upstreamYamlCounter := icons.CreateOverrideUpstreamYamlMetadata(downloadedIcons)
 
 	logrus.Infof("Finished downloading and saving upstream yml files with icons for override")
-	if upstreamYamlCounter != len(downloadedLogos) {
+	if upstreamYamlCounter != len(downloadedIcons) {
 		logrus.Warnf("Some packages were skipped due to wrong URLs or missing icons")
-		logrus.Warnf("Count of Downloaded logos: %d", len(downloadedLogos))
+		logrus.Warnf("Count of Downloaded logos: %d", len(downloadedIcons))
 		logrus.Warnf("Count of Written UpstreamYaml icons: %d", upstreamYamlCounter)
 	} else {
 		logrus.Infof("All packages were successfully processed")
@@ -1344,7 +1344,7 @@ func overwriteIndexIconsAndTestChanges(packageIconList icons.PackageIconList) er
 	helmIndexYaml.Merge(newHelmIndexYaml)
 	helmIndexYaml.SortEntries()
 
-	icons.ConvertYamlForIconOverride(helmIndexYaml, packageIconList)
+	icons.OverrideIconValues(helmIndexYaml, packageIconList)
 
 	err = helmIndexYaml.WriteFile(indexFilePath, 0644)
 	if err != nil {
@@ -1353,14 +1353,14 @@ func overwriteIndexIconsAndTestChanges(packageIconList icons.PackageIconList) er
 
 	updatedHelmIndexFile, _ := repo.LoadIndexFile(indexFilePath)
 
-	return icons.TestIconsAndIndexYaml(packageIconList, updatedHelmIndexFile)
+	return icons.ValidateIconsAndIndexYaml(packageIconList, updatedHelmIndexFile)
 }
 
 // generateChanges will generate the changes for the packages based on the flags provided
 // if auto or stage is true, it will write the index.yaml file if the chart has new updates
 // the charts to be modified depends on the populatePackages function and their update status
 // the changes will be applied on fetchUpstreams function
-func generateChanges(auto bool, stage bool, icons bool) {
+func generateChanges(auto bool, stage bool) {
 	currentPackage := os.Getenv(packageEnvVariable)
 	var packageList PackageList
 	var err error
@@ -1398,11 +1398,6 @@ func generateChanges(auto bool, stage bool, icons bool) {
 			}
 		}
 	}
-
-	if auto && icons {
-		overrideIcons()
-	}
-
 }
 
 // CLI function call - Prints list of available packages to STDout
@@ -1586,7 +1581,10 @@ func unstageChanges(c *cli.Context) {
 // CLI function call - Generates automated commit
 func autoUpdate(c *cli.Context) {
 	icons := c.Bool("icons")
-	generateChanges(true, false, icons)
+	generateChanges(true, false)
+	if icons {
+		overrideIcons()
+	}
 }
 
 // CLI function call - Validates repo against released
