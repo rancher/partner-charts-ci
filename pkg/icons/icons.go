@@ -14,6 +14,9 @@ const (
 	partnerDownloadPath = "assets/logos"
 )
 
+// possible extensions for the icons
+var extensions []string = []string{".png", ".jpg", ".jpeg", ".svg", ".ico"}
+
 // PackageIconOverride is a struct to hold the package name, path, and icon to override
 type PackageIconOverride struct {
 	Name string
@@ -27,8 +30,8 @@ type PackageIconList []PackageIconOverride
 // PackageIconMap is a map of PackageIconOverride
 type PackageIconMap map[string]PackageIconOverride
 
-// ParsePackageToOverride will convert a Package from a PackageList to a PackageIcon for a PackageIconList
-func ParsePackageToOverride(name, path, icon string) PackageIconOverride {
+// ParsePackageToPackageIconOverride will convert a Package from a PackageList to a PackageIconOverride for a PackageIconList, this will be used to override the icon in the index.yaml
+func ParsePackageToPackageIconOverride(name, path, icon string) PackageIconOverride {
 	return PackageIconOverride{
 		Name: name,
 		Path: path,
@@ -39,7 +42,8 @@ func ParsePackageToOverride(name, path, icon string) PackageIconOverride {
 // CheckFilesStructure will check if index.yaml and assets/logos exist
 // will log and exit if the file structure does not exist
 func CheckFilesStructure() {
-	if _, err := os.Stat(partnerFilePath); os.IsNotExist(err) {
+	exists := Exists(partnerFilePath)
+	if !exists {
 		fmt.Printf("File not found: %s\n", partnerFilePath)
 		logrus.Fatalf("File not found: %s\n", partnerFilePath)
 	}
@@ -49,18 +53,17 @@ func CheckFilesStructure() {
 	}
 }
 
-// CheckForOverrideConditions will check if the package has an upstream.yaml file and if the iconURL is a local file
-func CheckForOverrideConditions(packagePath string, iconURL string) bool {
-	var err error
-	if os.Stat(fmt.Sprintf("%s/upstream.yaml", packagePath)); os.IsNotExist(err) {
-		return false
-	}
-	if iconURL != "" {
-		if strings.HasPrefix(iconURL, "file://assets/logos") {
-			return true
+// CheckForDownloadedIcon will check if the icon is already downloaded and return the path
+func CheckForDownloadedIcon(packageName string) string {
+
+	for _, ext := range extensions {
+		filePath := fmt.Sprintf("assets/logos/%s%s", packageName, ext)
+		if exist := Exists(filePath); exist {
+			return fmt.Sprintf("file://%s", filePath)
 		}
 	}
-	return false
+
+	return ""
 }
 
 // OverrideIconValues will change the metade icon URL to a local icon path for the index.yaml

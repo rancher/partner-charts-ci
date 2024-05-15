@@ -45,7 +45,7 @@ func DownloadFiles(entriesPathsAndIconsMap PackageIconMap) PackageIconMap {
 		filePath := partnerDownloadPath + "/" + filename + ext
 		// Check if the file already exists and if exists, skip to the next file
 		if Exists(filePath) {
-			downloadedIcons[key] = ParsePackageToOverride(value.Name, value.Path, fmt.Sprintf("file://%s", filePath))
+			downloadedIcons[key] = ParsePackageToPackageIconOverride(value.Name, value.Path, fmt.Sprintf("file://%s", filePath))
 			continue
 		}
 
@@ -57,7 +57,7 @@ func DownloadFiles(entriesPathsAndIconsMap PackageIconMap) PackageIconMap {
 			continue
 		}
 		logrus.Infof("Downloaded logo and saved at: %s", filePath)
-		downloadedIcons[key] = ParsePackageToOverride(value.Name, value.Path, fmt.Sprintf("file://%s", filePath))
+		downloadedIcons[key] = ParsePackageToPackageIconOverride(value.Name, value.Path, fmt.Sprintf("file://%s", filePath))
 	}
 	logrus.Info("Icons asset downloads finished")
 	return downloadedIcons

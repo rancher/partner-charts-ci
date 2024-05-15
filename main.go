@@ -1260,18 +1260,9 @@ func downloadIcons(c *cli.Context) {
 
 	// Download all logos or retrieve the ones already downloaded
 	downloadedIcons := icons.DownloadFiles(entriesPathsAndIconsMap)
-	// Create the upstream.yaml files with the icon field for override based on the downloaded logos
-	upstreamYamlCounter := icons.CreateOverrideUpstreamYamlMetadata(downloadedIcons)
 
 	logrus.Infof("Finished downloading and saving upstream yml files with icons for override")
-	if upstreamYamlCounter != len(downloadedIcons) {
-		logrus.Warnf("Some packages were skipped due to wrong URLs or missing icons")
-		logrus.Warnf("Count of Downloaded logos: %d", len(downloadedIcons))
-		logrus.Warnf("Count of Written UpstreamYaml icons: %d", upstreamYamlCounter)
-	} else {
-		logrus.Infof("All packages were successfully processed")
-		logrus.Infof("Count of Written UpstreamYaml icons and downloaded files: %d", upstreamYamlCounter)
-	}
+	logrus.Infof("Downloaded %d icons", len(downloadedIcons))
 }
 
 // overrideIcons will get the package list and override the icon field in the index.yaml file with the downloaded icons.
@@ -1310,16 +1301,15 @@ func overrideIcons() {
 func parsePackageListToPackageIconList(packageList PackageList) icons.PackageIconList {
 	var packageIconList icons.PackageIconList
 	for _, pkg := range packageList {
-		iconURL := pkg.UpstreamYaml.ChartYaml.Icon
 
 		// check conditions for icon override and avoid panics
-		iconIsDownloaded := icons.CheckForOverrideConditions(pkg.Path, iconURL)
-		if !iconIsDownloaded {
+		iconURL := icons.CheckForDownloadedIcon(pkg.Name)
+		if iconURL == "" {
 			logrus.Errorf("Override conditions not met for icon: %s, at path: %s", iconURL, pkg.Path)
 			continue
 		}
 
-		pkgIcon := icons.ParsePackageToOverride(pkg.Name, pkg.Path, iconURL)
+		pkgIcon := icons.ParsePackageToPackageIconOverride(pkg.Name, pkg.Path, iconURL)
 		packageIconList = append(packageIconList, pkgIcon)
 	}
 	return packageIconList
@@ -1561,14 +1551,14 @@ func cleanCharts(c *cli.Context) {
 
 // CLI function call - Prepares package(s) for modification via patch
 func prepareCharts(c *cli.Context) {
-	generateChanges(false, false, false)
+	generateChanges(false, false)
 }
 
 // CLI function call - Generates all changes for available packages,
 // Checking against upstream version, prepare, patch, clean, and index update
 // Does not commit
 func stageChanges(c *cli.Context) {
-	generateChanges(false, true, false)
+	generateChanges(false, true)
 }
 
 func unstageChanges(c *cli.Context) {
