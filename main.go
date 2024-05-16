@@ -15,6 +15,7 @@ import (
 	"github.com/rancher/charts-build-scripts/pkg/filesystem"
 	"github.com/rancher/partner-charts-ci/pkg/conform"
 	"github.com/rancher/partner-charts-ci/pkg/fetcher"
+	"github.com/rancher/partner-charts-ci/pkg/icons"
 	"github.com/rancher/partner-charts-ci/pkg/parse"
 	"github.com/rancher/partner-charts-ci/pkg/validate"
 	"github.com/sirupsen/logrus"
@@ -399,7 +400,7 @@ func gitCleanup() error {
 }
 
 // Commits changes to index file, assets, charts, and packages
-func commitChanges(updatedList PackageList) error {
+func commitChanges(updatedList PackageList, iconOverride bool) error {
 	var additions, updates string
 	commitOptions := git.CommitOptions{}
 
@@ -451,8 +452,10 @@ func commitChanges(updatedList PackageList) error {
 	}
 
 	wt.Add(indexFile)
-
 	commitMessage := "Charts CI\n```"
+	if iconOverride {
+		commitMessage = "Icon Override CI\n```"
+	}
 	sort.Sort(updatedList)
 	for _, packageWrapper := range updatedList {
 		lineItem := fmt.Sprintf("  %s/%s:\n",
@@ -1118,6 +1121,7 @@ func writeIndex() error {
 	}
 	helmIndexYaml.Merge(newHelmIndexYaml)
 	helmIndexYaml.SortEntries()
+
 	err = helmIndexYaml.WriteFile(indexFilePath, 0644)
 	if err != nil {
 		return err
@@ -1224,13 +1228,127 @@ func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, 
 		if onlyUpdates && !updated {
 			continue
 		}
+
 		packageList = append(packageList, packageWrapper)
 	}
 
 	return packageList, nil
 }
 
-// func generateChanges(genpatch bool, save bool, commit bool, onlyUpdates bool, print bool) {
+// downloadIcons should only be used in a local machine by manual execution.
+// It will download all icons that contain URLs from the index.yaml file, if it is already downloaded it will keep it.
+// All downloaded icons will be saved in the assets/icons directory.
+func downloadIcons(c *cli.Context) {
+	currentPackage := os.Getenv(packageEnvVariable)
+	icons.CheckFilesStructure() // stop execution if file structure is not correct
+
+	packageList, err := populatePackages(currentPackage, false, false, false)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
+	// Convert packageList to PackageIconMap
+	var entriesPathsAndIconsMap icons.PackageIconMap = make(icons.PackageIconMap)
+	for _, pkg := range packageList {
+		entriesPathsAndIconsMap[pkg.Name] = icons.PackageIconOverride{
+			Name: pkg.Name,
+			Path: pkg.Path,
+			Icon: pkg.LatestStored.Metadata.Icon,
+		}
+	}
+
+	// Download all icons or retrieve the ones already downloaded
+	downloadedIcons := icons.DownloadFiles(entriesPathsAndIconsMap)
+
+	logrus.Infof("Finished downloading and saving icon files")
+	logrus.Infof("Downloaded %d icons", len(downloadedIcons))
+}
+
+// overrideIcons will get the package list and override the icon field in the index.yaml file with the downloaded icons.
+// It will also test if the icons are correctly overridden and if the index.yaml file is correctly written.
+// If the test fails, it will return an error and the user should check the logs for more information.
+// It will only work if the downloadIcons function was previously executed at some point in time.
+// The function will not download the icons, it will only override the icon field in the index.yaml file.
+// Before overriding the icons, it will check if the necessary conditions are met at parsePackageListToPackageIconList() function, if not it will skip the package.
+func overrideIcons() {
+	currentPackage := os.Getenv(packageEnvVariable)
+	iconOverride := true
+	icons.CheckFilesStructure() // stop execution if file structure is not correct
+
+	// populate all possible packages
+	packageList, err := populatePackages(currentPackage, false, false, false)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
+	// parse only the packages that have the necessary conditions for icon override
+	packageIconList := parsePackageListToPackageIconList(packageList)
+
+	err = overwriteIndexIconsAndTestChanges(packageIconList)
+	if err != nil {
+		logrus.Errorf("Failed to overwrite index icons: %v", err)
+	}
+
+	err = commitChanges(packageList, iconOverride)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+}
+
+// parsePackageListToPackageIconList will parse the PackageList to PackageIconList
+// and check if the necessary override icon conditions are met
+func parsePackageListToPackageIconList(packageList PackageList) icons.PackageIconList {
+	var packageIconList icons.PackageIconList
+	for _, pkg := range packageList {
+
+		// check conditions for icon override and avoid panics
+		iconURL := icons.CheckForDownloadedIcon(pkg.Name)
+		if iconURL == "" {
+			logrus.Errorf("Override conditions not met for icon: %s, at path: %s", iconURL, pkg.Path)
+			continue
+		}
+
+		pkgIcon := icons.ParsePackageToPackageIconOverride(pkg.Name, pkg.Path, iconURL)
+		packageIconList = append(packageIconList, pkgIcon)
+	}
+	return packageIconList
+}
+
+// overwriteIndexIconsAndTestChanges will overwrite the index.yaml icon fields with the new downloaded icons path
+func overwriteIndexIconsAndTestChanges(packageIconList icons.PackageIconList) error {
+	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
+	if _, err := os.Stat(indexFilePath); os.IsNotExist(err) {
+		return err
+	}
+
+	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
+	if err != nil {
+		return err
+	}
+	assetsDirectoryPath := filepath.Join(getRepoRoot(), repositoryAssetsDir)
+	newHelmIndexYaml, err := repo.IndexDirectory(assetsDirectoryPath, repositoryAssetsDir)
+	if err != nil {
+		return err
+	}
+	helmIndexYaml.Merge(newHelmIndexYaml)
+	helmIndexYaml.SortEntries()
+
+	icons.OverrideIconValues(helmIndexYaml, packageIconList)
+
+	err = helmIndexYaml.WriteFile(indexFilePath, 0644)
+	if err != nil {
+		return err
+	}
+
+	updatedHelmIndexFile, _ := repo.LoadIndexFile(indexFilePath)
+
+	return icons.ValidateIconsAndIndexYaml(packageIconList, updatedHelmIndexFile)
+}
+
+// generateChanges will generate the changes for the packages based on the flags provided
+// if auto or stage is true, it will write the index.yaml file if the chart has new updates
+// the charts to be modified depends on the populatePackages function and their update status
+// the changes will be applied on fetchUpstreams function
 func generateChanges(auto bool, stage bool) {
 	currentPackage := os.Getenv(packageEnvVariable)
 	var packageList PackageList
@@ -1263,7 +1381,7 @@ func generateChanges(auto bool, stage bool) {
 			}
 		}
 		if auto {
-			err = commitChanges(packageList)
+			err = commitChanges(packageList, false)
 			if err != nil {
 				logrus.Fatal(err)
 			}
@@ -1451,7 +1569,11 @@ func unstageChanges(c *cli.Context) {
 
 // CLI function call - Generates automated commit
 func autoUpdate(c *cli.Context) {
+	icons := c.Bool("icons")
 	generateChanges(true, false)
+	if icons {
+		overrideIcons()
+	}
 }
 
 // CLI function call - Validates repo against released
@@ -1577,11 +1699,17 @@ func main() {
 			Name:   "prepare",
 			Usage:  "Pull chart from upstream and prepare for alteration via patch",
 			Action: prepareCharts,
+			Hidden: true, // Hidden because this subcommand does not execute overrideIcons
+			// that is necessary in the current release process,
+			// this should not be executed and pushed to production
+			// otherwise we will not have the icons updated at index.yaml.
+			// You should use the auto command instead.
 		},
 		{
 			Name:   "patch",
 			Usage:  "Generate patch files",
 			Action: patchCharts,
+			Hidden: true, // Hidden because this needs maintenance.
 		},
 		{
 			Name:   "clean",
@@ -1592,11 +1720,22 @@ func main() {
 			Name:   "auto",
 			Usage:  "Generate and commit changes",
 			Action: autoUpdate,
+			Flags: []cli.Flag{
+				&cli.BoolFlag{
+					Name:  "icons",
+					Usage: "override icons in index.yaml if true",
+				},
+			},
 		},
 		{
 			Name:   "stage",
 			Usage:  "Stage all changes. Does not commit",
 			Action: stageChanges,
+			Hidden: true, // Hidden because this subcommand does not execute overrideIcons
+			// that is necessary in the current release process,
+			// this should not be executed and pushed to production
+			// otherwise we will not have the icons updated at index.yaml.
+			// You should use the auto command instead.
 		},
 		{
 			Name:   "unstage",
@@ -1633,6 +1772,11 @@ func main() {
 			Name:   "validate",
 			Usage:  "Check repo against released charts",
 			Action: validateRepo,
+		},
+		{
+			Name:   "download-icons",
+			Usage:  "Download icons from charts in index.yaml",
+			Action: downloadIcons,
 		},
 	}
 
