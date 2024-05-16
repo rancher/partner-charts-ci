@@ -10,7 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// DownloadFiles will download all available icons from chart in index.yaml at assets/logos and return the successfully downloaded files.
+// DownloadFiles will download all available icons from chart in index.yaml at assets/icons and return the successfully downloaded files.
 // If the file is already downloaded, it will skip the download process but still save the PackageIcon to the map so it can be overridden later
 func DownloadFiles(entriesPathsAndIconsMap PackageIconMap) PackageIconMap {
 	var failedURLs map[string]string = make(map[string]string)
@@ -21,7 +21,7 @@ func DownloadFiles(entriesPathsAndIconsMap PackageIconMap) PackageIconMap {
 		filename := value.Name   // chart name from the index.yaml
 		ext := filepath.Ext(url) // file extension from the URL
 
-		// GET Request for downloading the logo file
+		// GET Request for downloading the icon file
 		resp, err := http.Get(url)
 		if err != nil {
 			failedURLs[filename] = url
@@ -49,14 +49,14 @@ func DownloadFiles(entriesPathsAndIconsMap PackageIconMap) PackageIconMap {
 			continue
 		}
 
-		// Create and save the logo file locally
+		// Create and save the icon file locally
 		err = saveIconFile(filePath, resp.Body)
 		if err != nil {
 			failedURLs[filename] = url
 			logrus.Errorf("Failed to create/write file: %s", filePath)
 			continue
 		}
-		logrus.Infof("Downloaded logo and saved at: %s", filePath)
+		logrus.Infof("Downloaded icon and saved at: %s", filePath)
 		downloadedIcons[key] = ParsePackageToPackageIconOverride(value.Name, value.Path, fmt.Sprintf("file://%s", filePath))
 	}
 	logrus.Info("Icons asset downloads finished")

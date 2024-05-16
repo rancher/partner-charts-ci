@@ -11,7 +11,7 @@ import (
 
 const (
 	partnerFilePath     = "index.yaml"
-	partnerDownloadPath = "assets/logos"
+	partnerDownloadPath = "assets/icons"
 )
 
 // possible extensions for the icons
@@ -39,7 +39,7 @@ func ParsePackageToPackageIconOverride(name, path, icon string) PackageIconOverr
 	}
 }
 
-// CheckFilesStructure will check if index.yaml and assets/logos exist
+// CheckFilesStructure will check if index.yaml and assets/icons exist
 // will log and exit if the file structure does not exist
 func CheckFilesStructure() {
 	exists := Exists(partnerFilePath)
@@ -57,7 +57,7 @@ func CheckFilesStructure() {
 func CheckForDownloadedIcon(packageName string) string {
 
 	for _, ext := range extensions {
-		filePath := fmt.Sprintf("assets/logos/%s%s", packageName, ext)
+		filePath := fmt.Sprintf("assets/icons/%s%s", packageName, ext)
 		if exist := Exists(filePath); exist {
 			return fmt.Sprintf("file://%s", filePath)
 		}
@@ -112,18 +112,18 @@ func ValidateIconsAndIndexYaml(packageIconList PackageIconList, helmIndexFile *r
 	downloadedIconFiles, err := countDownloadedIconFiles()
 	presentIconEntries := countIconEntriesInIndex(helmIndexFile)
 	if err != nil {
-		logrus.Errorf("Error reading assets/logos: %v", err)
+		logrus.Errorf("Error reading assets/icons: %v", err)
 		return err
 	}
 	if downloadedIconFiles != presentIconEntries {
-		logrus.Errorf("Icon files in assets/logos: %d, Icon files in index.yaml: %d", downloadedIconFiles, presentIconEntries)
-		return fmt.Errorf("icon files in assets/logos and index.yaml do not match")
+		logrus.Errorf("Icon files in assets/icons: %d, Icon files in index.yaml: %d", downloadedIconFiles, presentIconEntries)
+		return fmt.Errorf("icon files in assets/icons and index.yaml do not match")
 	}
 	return err
 }
 
 func countDownloadedIconFiles() (int, error) {
-	files, err := os.ReadDir("assets/logos")
+	files, err := os.ReadDir("assets/icons")
 	if err != nil {
 		return 0, err
 	}

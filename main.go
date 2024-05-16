@@ -1237,8 +1237,7 @@ func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, 
 
 // downloadIcons should only be used in a local machine by manual execution.
 // It will download all icons that contain URLs from the index.yaml file, if it is already downloaded it will keep it.
-// All downloaded icons will be saved in the assets/logos directory and for all of them will be created a upstream.yaml file in the respective packages folder.
-// The upstream.yaml file will contain the icon field under ChartMetadata to be overriden in the index.yaml file later by the overrideIcons function.
+// All downloaded icons will be saved in the assets/icons directory.
 func downloadIcons(c *cli.Context) {
 	currentPackage := os.Getenv(packageEnvVariable)
 	icons.CheckFilesStructure() // stop execution if file structure is not correct
@@ -1258,10 +1257,10 @@ func downloadIcons(c *cli.Context) {
 		}
 	}
 
-	// Download all logos or retrieve the ones already downloaded
+	// Download all icons or retrieve the ones already downloaded
 	downloadedIcons := icons.DownloadFiles(entriesPathsAndIconsMap)
 
-	logrus.Infof("Finished downloading and saving upstream yml files with icons for override")
+	logrus.Infof("Finished downloading and saving icon files")
 	logrus.Infof("Downloaded %d icons", len(downloadedIcons))
 }
 
@@ -1700,11 +1699,17 @@ func main() {
 			Name:   "prepare",
 			Usage:  "Pull chart from upstream and prepare for alteration via patch",
 			Action: prepareCharts,
+			Hidden: true, // Hidden because this subcommand does not execute overrideIcons
+			// that is necessary in the current release process,
+			// this should not be executed and pushed to production
+			// otherwise we will not have the icons updated at index.yaml.
+			// You should use the auto command instead.
 		},
 		{
 			Name:   "patch",
 			Usage:  "Generate patch files",
 			Action: patchCharts,
+			Hidden: true, // Hidden because this needs maintenance.
 		},
 		{
 			Name:   "clean",
@@ -1726,6 +1731,11 @@ func main() {
 			Name:   "stage",
 			Usage:  "Stage all changes. Does not commit",
 			Action: stageChanges,
+			Hidden: true, // Hidden because this subcommand does not execute overrideIcons
+			// that is necessary in the current release process,
+			// this should not be executed and pushed to production
+			// otherwise we will not have the icons updated at index.yaml.
+			// You should use the auto command instead.
 		},
 		{
 			Name:   "unstage",
@@ -1765,7 +1775,7 @@ func main() {
 		},
 		{
 			Name:   "download-icons",
-			Usage:  "Download icons from charts in index.yaml and create oveverlay upstream.yaml on packages",
+			Usage:  "Download icons from charts in index.yaml",
 			Action: downloadIcons,
 		},
 	}
