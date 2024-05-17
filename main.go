@@ -140,7 +140,9 @@ func (packageWrapper PackageWrapper) patch() error {
 	}
 
 	if !packageWrapper.ManualUpdate {
-		packageYaml.Remove()
+		if err := packageYaml.Remove(); err != nil {
+			return fmt.Errorf("failed to remove package.yaml: %w", err)
+		}
 	}
 
 	return nil
@@ -330,7 +332,7 @@ func (packageWrapper PackageWrapper) annotate(annotation, value string, remove, 
 			if err != nil {
 				return err
 			}
-			conform.ExportChartDirectory(helmChart, versionPath)
+			err = conform.ExportChartDirectory(helmChart, versionPath)
 			if err != nil {
 				return err
 			}
@@ -432,9 +434,11 @@ func commitChanges(updatedList PackageList, iconOverride bool) error {
 			packageWrapper.ParsedVendor,
 			packageWrapper.Name)
 
-		wt.Add(assetsPath)
-		wt.Add(chartsPath)
-		wt.Add(packagesPath)
+		for _, path := range []string{assetsPath, chartsPath, packagesPath} {
+			if _, err := wt.Add(path); err != nil {
+				return fmt.Errorf("failed to add %q to working tree: %w", path, err)
+			}
+		}
 
 		gitStatus, err := wt.Status()
 		if err != nil {
@@ -452,7 +456,9 @@ func commitChanges(updatedList PackageList, iconOverride bool) error {
 
 	}
 
-	wt.Add(indexFile)
+	if _, err := wt.Add(indexFile); err != nil {
+		return fmt.Errorf("failed to add %q to working tree: %w", indexFile, err)
+	}
 	commitMessage := "Charts CI\n```"
 	if iconOverride {
 		commitMessage = "Icon Override CI\n```"
@@ -527,7 +533,9 @@ func prepareManualPackage(packagePath string) error {
 		logrus.Error(err)
 	}
 
-	conform.LinkOverlayFiles(packagePath)
+	if err := conform.LinkOverlayFiles(packagePath); err != nil {
+		return fmt.Errorf("failed to link overlay files for %q: %w", packagePath, err)
+	}
 
 	err = pkg.Prepare()
 	if err != nil {
@@ -818,7 +826,9 @@ func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetad
 	}
 
 	chartDirectoryPath := path.Join(packagePath, repositoryChartsDir)
-	conform.StandardizeChartDirectory(chartDirectoryPath, "")
+	if err := conform.StandardizeChartDirectory(chartDirectoryPath, ""); err != nil {
+		return nil, fmt.Errorf("failed to standardize chart directory: %w", err)
+	}
 
 	err = conform.ApplyOverlayFiles(packagePath)
 	if err != nil {
@@ -899,7 +909,9 @@ func conformPackage(packageWrapper PackageWrapper) error {
 			if val, ok := getByAnnotation(annotationFeatured, "")[packageWrapper.Name]; ok {
 				logrus.Debugf("Migrating featured annotation to latest version %s\n", packageWrapper.Name)
 				featuredIndex := val[0].Annotations[annotationFeatured]
-				packageWrapper.annotate(annotationFeatured, "", true, false)
+				if err := packageWrapper.annotate(annotationFeatured, "", true, false); err != nil {
+					return fmt.Errorf("failed to annotate package: %w", err)
+				}
 				packageWrapper.Annotations[annotationFeatured] = featuredIndex
 			}
 

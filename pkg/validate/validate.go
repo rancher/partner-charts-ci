@@ -163,8 +163,12 @@ func CompareDirectories(leftPath, rightPath string, exclude map[string]struct{})
 		return nil
 	}
 
-	filepath.Walk(leftPath, compareLeft)
-	filepath.Walk(rightPath, compareRight)
+	if err := filepath.Walk(leftPath, compareLeft); err != nil {
+		return DirectoryComparison{}, fmt.Errorf("failed while walking %q: %w", leftPath, err)
+	}
+	if err := filepath.Walk(rightPath, compareRight); err != nil {
+		return DirectoryComparison{}, fmt.Errorf("failed while walking %q: %w", rightPath, err)
+	}
 
 	if len(directoryComparison.Modified)+len(directoryComparison.Added)+len(directoryComparison.Removed) > 0 {
 		directoryComparison.Match = false
