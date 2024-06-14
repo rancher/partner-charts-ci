@@ -1127,33 +1127,19 @@ func generatePackageList(currentPackage string) PackageList {
 		logrus.Error(err)
 	}
 
+	// get sorted list of package names
 	packageNames := make([]string, 0, len(packageMap))
 	for packageName := range packageMap {
 		packageNames = append(packageNames, packageName)
 	}
-
-	//Support fallback for existing packages without upstream yaml
-	if len(packageNames) == 0 {
-		packageNames, err = charts.ListPackages(getRepoRoot(), currentPackage)
-		if err != nil {
-			logrus.Error(err)
-		}
-	}
-
 	sort.Strings(packageNames)
 
-	packageList := make(PackageList, 0)
+	// construct list of PackageWrappers
+	packageList := make(PackageList, 0, len(packageNames))
 	for _, packageName := range packageNames {
-		var packageWrapper PackageWrapper
-		//If name is not present in map, fall back to package.yaml method
-		if _, ok := packageMap[packageName]; !ok {
-			//ManualUpdate indicates usage of package.yaml method
-			packageWrapper.ManualUpdate = true
-			packageMap[packageName] = path.Join(getRepoRoot(), repositoryPackagesDir, packageName)
+		packageWrapper := PackageWrapper{
+			Path: packageMap[packageName],
 		}
-
-		packageWrapper.Path = packageMap[packageName]
-
 		packageList = append(packageList, packageWrapper)
 	}
 
