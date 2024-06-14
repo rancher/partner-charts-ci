@@ -12,8 +12,6 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/go-git/go-git/v5"
-	"github.com/rancher/charts-build-scripts/pkg/charts"
-	"github.com/rancher/charts-build-scripts/pkg/filesystem"
 	"github.com/rancher/partner-charts-ci/pkg/conform"
 	"github.com/rancher/partner-charts-ci/pkg/fetcher"
 	"github.com/rancher/partner-charts-ci/pkg/icons"
@@ -70,8 +68,6 @@ type PackageWrapper struct {
 	Path string
 	//LatestStored stores the latest version of the chart currently in the repo
 	LatestStored repo.ChartVersion
-	//ManualUpdate evaluates true if package does not provide upstream yaml for automated update
-	ManualUpdate bool
 	//Chart name
 	Name string
 	//Untracked upstream versions newer than latest tracked
@@ -111,130 +107,51 @@ func (p PackageList) Less(i, j int) bool {
 	return false
 }
 
-func (packageWrapper *PackageWrapper) populateManual() (bool, error) {
-	//Preparing the chart to pull the actual release-name and version
-	err := prepareManualPackage(packageWrapper.Path)
-	if err != nil {
-		return false, err
-	}
-
-	pkg, err := generatePackage(packageWrapper.Path)
-	if err != nil {
-		return false, err
-	}
-
-	chartPath := path.Join(packageWrapper.Path, repositoryChartsDir)
-	helmChart, err := loader.Load(chartPath)
-	if err != nil {
-		return false, err
-	}
-
-	sourceMetadata := fetcher.ChartSourceMetadata{
-		Source:   "direct",
-		Versions: make(repo.ChartVersions, 1),
-	}
-
-	packageWrapper.Name = helmChart.Name()
-	packageWrapper.Vendor, packageWrapper.ParsedVendor = parseVendor("", packageWrapper.Name, packageWrapper.Path)
-
-	chartVersion := repo.ChartVersion{
-		Metadata: &chart.Metadata{
-			Name: packageWrapper.Name,
-		},
-		URLs: make([]string, 1),
-	}
-
-	fixedVersion := ""
-	if pkg.Version != nil {
-		fixedVersion = pkg.Version.String()
-	}
-
-	chartVersion.URLs[0] = pkg.Upstream.GetOptions().URL
-	chartVersion.Version, err = conform.GeneratePackageVersion(
-		helmChart.Metadata.Version,
-		pkg.PackageVersion,
-		fixedVersion)
-	if err != nil {
-		return false, err
-	}
-
-	packageWrapper.SourceMetadata = &sourceMetadata
-	packageWrapper.SourceMetadata.Versions[0] = &chartVersion
-
-	packageWrapper.FetchVersions, err = filterVersions(
-		packageWrapper.SourceMetadata.Versions,
-		"",
-		nil)
-	if err != nil {
-		return false, err
-	}
-
-	packageWrapper.LatestStored, err = getLatestStoredVersion(helmChart.Name())
-	if err != nil {
-		return false, err
-	}
-
-	err = cleanPackage(packageWrapper.Path, true)
-	if err != nil {
-		return false, err
-	}
-	if len(packageWrapper.FetchVersions) == 0 {
-		return false, nil
-	}
-
-	return true, nil
-
-}
-
 // Populates package wrapper with relevant data from upstream, checks for updates,
 // writes out package yaml file, and generates package object
 // Returns true if newer package version is available
 func (packageWrapper *PackageWrapper) populate() (bool, error) {
 	var err error
-	if packageWrapper.ManualUpdate {
-		return packageWrapper.populateManual()
-	} else {
-		packageWrapper.UpstreamYaml, err = parseUpstream(packageWrapper.Path)
-		if err != nil {
-			return false, err
-		}
-
-		sourceMetadata, err := generateChartSourceMetadata(*packageWrapper.UpstreamYaml)
-		if err != nil {
-			return false, err
-		}
-
-		packageWrapper.SourceMetadata = sourceMetadata
-		packageWrapper.Name = sourceMetadata.Versions[0].Name
-		packageWrapper.Vendor, packageWrapper.ParsedVendor = parseVendor(packageWrapper.UpstreamYaml.Vendor, packageWrapper.Name, packageWrapper.Path)
-
-		if packageWrapper.OnlyLatest {
-			packageWrapper.UpstreamYaml.Fetch = "latest"
-			if packageWrapper.UpstreamYaml.TrackVersions != nil {
-				packageWrapper.UpstreamYaml.TrackVersions = []string{packageWrapper.UpstreamYaml.TrackVersions[0]}
-			}
-		}
-
-		packageWrapper.FetchVersions, err = filterVersions(
-			packageWrapper.SourceMetadata.Versions,
-			packageWrapper.UpstreamYaml.Fetch,
-			packageWrapper.UpstreamYaml.TrackVersions)
-		if err != nil {
-			return false, err
-		}
-
-		packageWrapper.LatestStored, err = getLatestStoredVersion(packageWrapper.Name)
-		if err != nil {
-			return false, err
-		}
-
-		if packageWrapper.UpstreamYaml.DisplayName != "" {
-			packageWrapper.DisplayName = packageWrapper.UpstreamYaml.DisplayName
-		} else {
-			packageWrapper.DisplayName = packageWrapper.Name
-		}
-
+	packageWrapper.UpstreamYaml, err = parseUpstream(packageWrapper.Path)
+	if err != nil {
+		return false, err
 	}
+
+	sourceMetadata, err := generateChartSourceMetadata(*packageWrapper.UpstreamYaml)
+	if err != nil {
+		return false, err
+	}
+
+	packageWrapper.SourceMetadata = sourceMetadata
+	packageWrapper.Name = sourceMetadata.Versions[0].Name
+	packageWrapper.Vendor, packageWrapper.ParsedVendor = parseVendor(packageWrapper.UpstreamYaml.Vendor, packageWrapper.Name, packageWrapper.Path)
+
+	if packageWrapper.OnlyLatest {
+		packageWrapper.UpstreamYaml.Fetch = "latest"
+		if packageWrapper.UpstreamYaml.TrackVersions != nil {
+			packageWrapper.UpstreamYaml.TrackVersions = []string{packageWrapper.UpstreamYaml.TrackVersions[0]}
+		}
+	}
+
+	packageWrapper.FetchVersions, err = filterVersions(
+		packageWrapper.SourceMetadata.Versions,
+		packageWrapper.UpstreamYaml.Fetch,
+		packageWrapper.UpstreamYaml.TrackVersions)
+	if err != nil {
+		return false, err
+	}
+
+	packageWrapper.LatestStored, err = getLatestStoredVersion(packageWrapper.Name)
+	if err != nil {
+		return false, err
+	}
+
+	if packageWrapper.UpstreamYaml.DisplayName != "" {
+		packageWrapper.DisplayName = packageWrapper.UpstreamYaml.DisplayName
+	} else {
+		packageWrapper.DisplayName = packageWrapper.Name
+	}
+
 	if len(packageWrapper.FetchVersions) == 0 {
 		return false, nil
 	}
@@ -468,53 +385,13 @@ func commitChanges(updatedList PackageList, iconOverride bool) error {
 }
 
 // Cleans up ephemeral chart directory files from package prepare
-func cleanPackage(packagePath string, manualUpdate bool) error {
+func cleanPackage(packagePath string) error {
 	packageName := strings.TrimPrefix(getRelativePath(packagePath), "/")
 	logrus.Infof("Cleaning package %s\n", packageName)
-	if manualUpdate {
-		logrus.Debugf("Generating package %s\n", packageName)
-		pkg, err := generatePackage(packagePath)
-		if err != nil {
-			return err
-		}
-		err = pkg.Clean()
-		if err != nil {
-			return err
-		}
-	} else {
-		os.RemoveAll(path.Join(packagePath, repositoryChartsDir))
+	chartsPath := path.Join(packagePath, repositoryChartsDir)
+	if err := os.RemoveAll(chartsPath); err != nil {
+		return fmt.Errorf("failed to remove charts directory: %w", err)
 	}
-
-	return nil
-}
-
-// Prepares package for modification via patch
-func prepareManualPackage(packagePath string) error {
-	logrus.Debugf("Generated package from %s", packagePath)
-	pkg, err := generatePackage(packagePath)
-	if err != nil {
-		logrus.Error(err)
-	}
-
-	if err := conform.LinkOverlayFiles(packagePath); err != nil {
-		return fmt.Errorf("failed to link overlay files for %q: %w", packagePath, err)
-	}
-
-	err = pkg.Prepare()
-	if err != nil {
-		err = cleanPackage(packagePath, true)
-		if err != nil {
-			logrus.Error(err)
-		}
-		logrus.Error("Unable to prepare package. Cleaning up and skipping...")
-		return err
-	}
-
-	patchOrigPath := path.Join(packagePath, repositoryChartsDir, "Chart.yaml.orig")
-	if _, err := os.Stat(patchOrigPath); !os.IsNotExist(err) {
-		os.Remove(patchOrigPath)
-	}
-
 	return nil
 }
 
@@ -545,19 +422,6 @@ func preparePackage(packagePath string, sourceMetadata *fetcher.ChartSourceMetad
 	}
 
 	return nil
-}
-
-// Creates Package object to operate upon based on package path
-func generatePackage(packagePath string) (*charts.Package, error) {
-	logrus.Debugf("Generating package from %s\n", packagePath)
-	packageRelativePath := getRelativePath(packagePath)
-	rootFs := filesystem.GetFilesystem(getRepoRoot())
-	pkg, err := charts.GetPackage(rootFs, packageRelativePath)
-	if err != nil {
-		return nil, err
-	}
-
-	return pkg, nil
 }
 
 func collectTrackedVersions(upstreamVersions repo.ChartVersions, tracked []string) map[string]repo.ChartVersions {
@@ -757,15 +621,9 @@ func parseVendor(upstreamYamlVendor, chartName, packagePath string) (string, str
 }
 
 // Prepares and standardizes chart, then returns loaded chart object
-func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetadata, chartVersion repo.ChartVersion, manualUpdate bool) (*chart.Chart, error) {
+func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetadata, chartVersion repo.ChartVersion) (*chart.Chart, error) {
 	var err error
-	if manualUpdate {
-		err = prepareManualPackage(packagePath)
-
-	} else {
-		err = preparePackage(packagePath, &sourceMetadata, &chartVersion)
-	}
-	if err != nil {
+	if err := preparePackage(packagePath, &sourceMetadata, &chartVersion); err != nil {
 		return nil, err
 	}
 
@@ -799,7 +657,6 @@ func conformPackage(packageWrapper PackageWrapper) error {
 			packageWrapper.Path,
 			*packageWrapper.SourceMetadata,
 			*chartVersion,
-			packageWrapper.ManualUpdate,
 		)
 		if err != nil {
 			return err
@@ -823,67 +680,48 @@ func conformPackage(packageWrapper PackageWrapper) error {
 			}
 		}
 
-		if packageWrapper.ManualUpdate {
-			packageWrapper.Name = helmChart.Name()
-			chartVersion.Version = helmChart.Metadata.Version
-			pkg, err := generatePackage(packageWrapper.Path)
-			if err != nil {
-				return err
-			}
-
-			if packageWrapper.GenPatch {
-				err = pkg.GeneratePatch()
-				if err != nil {
-					return err
-				}
-
-			}
-
+		packageWrapper.Annotations[annotationCertified] = "partner"
+		packageWrapper.Annotations[annotationDisplayName] = packageWrapper.DisplayName
+		if packageWrapper.UpstreamYaml.ReleaseName != "" {
+			packageWrapper.Annotations[annotationReleaseName] = packageWrapper.UpstreamYaml.ReleaseName
 		} else {
-			packageWrapper.Annotations[annotationCertified] = "partner"
-			packageWrapper.Annotations[annotationDisplayName] = packageWrapper.DisplayName
-			if packageWrapper.UpstreamYaml.ReleaseName != "" {
-				packageWrapper.Annotations[annotationReleaseName] = packageWrapper.UpstreamYaml.ReleaseName
-			} else {
-				packageWrapper.Annotations[annotationReleaseName] = packageWrapper.Name
-			}
-
-			conform.OverlayChartMetadata(helmChart, packageWrapper.UpstreamYaml.ChartYaml)
-
-			if val, ok := getByAnnotation(annotationFeatured, "")[packageWrapper.Name]; ok {
-				logrus.Debugf("Migrating featured annotation to latest version %s\n", packageWrapper.Name)
-				featuredIndex := val[0].Annotations[annotationFeatured]
-				if err := packageWrapper.annotate(annotationFeatured, "", true, false); err != nil {
-					return fmt.Errorf("failed to annotate package: %w", err)
-				}
-				packageWrapper.Annotations[annotationFeatured] = featuredIndex
-			}
-
-			if packageWrapper.UpstreamYaml.Namespace != "" {
-				packageWrapper.Annotations[annotationNamespace] = packageWrapper.UpstreamYaml.Namespace
-			}
-			if helmChart.Metadata.KubeVersion != "" && packageWrapper.UpstreamYaml.ChartYaml.KubeVersion != "" {
-				packageWrapper.Annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
-				helmChart.Metadata.KubeVersion = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
-			} else if helmChart.Metadata.KubeVersion != "" {
-				packageWrapper.Annotations[annotationKubeVersion] = helmChart.Metadata.KubeVersion
-			} else if packageWrapper.UpstreamYaml.ChartYaml.KubeVersion != "" {
-				packageWrapper.Annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
-			}
-
-			if packageVersion := packageWrapper.UpstreamYaml.PackageVersion; packageVersion != 0 {
-				helmChart.Metadata.Version, err = conform.GeneratePackageVersion(helmChart.Metadata.Version, &packageVersion, "")
-				if err != nil {
-					logrus.Error(err)
-				}
-			}
-
-			conform.ApplyChartAnnotations(helmChart, packageWrapper.Annotations, false)
-
+			packageWrapper.Annotations[annotationReleaseName] = packageWrapper.Name
 		}
 
+		conform.OverlayChartMetadata(helmChart, packageWrapper.UpstreamYaml.ChartYaml)
+
+		if val, ok := getByAnnotation(annotationFeatured, "")[packageWrapper.Name]; ok {
+			logrus.Debugf("Migrating featured annotation to latest version %s\n", packageWrapper.Name)
+			featuredIndex := val[0].Annotations[annotationFeatured]
+			if err := packageWrapper.annotate(annotationFeatured, "", true, false); err != nil {
+				return fmt.Errorf("failed to annotate package: %w", err)
+			}
+			packageWrapper.Annotations[annotationFeatured] = featuredIndex
+		}
+
+		if packageWrapper.UpstreamYaml.Namespace != "" {
+			packageWrapper.Annotations[annotationNamespace] = packageWrapper.UpstreamYaml.Namespace
+		}
+		if helmChart.Metadata.KubeVersion != "" && packageWrapper.UpstreamYaml.ChartYaml.KubeVersion != "" {
+			packageWrapper.Annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
+			helmChart.Metadata.KubeVersion = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
+		} else if helmChart.Metadata.KubeVersion != "" {
+			packageWrapper.Annotations[annotationKubeVersion] = helmChart.Metadata.KubeVersion
+		} else if packageWrapper.UpstreamYaml.ChartYaml.KubeVersion != "" {
+			packageWrapper.Annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
+		}
+
+		if packageVersion := packageWrapper.UpstreamYaml.PackageVersion; packageVersion != 0 {
+			helmChart.Metadata.Version, err = conform.GeneratePackageVersion(helmChart.Metadata.Version, &packageVersion, "")
+			if err != nil {
+				logrus.Error(err)
+			}
+		}
+
+		conform.ApplyChartAnnotations(helmChart, packageWrapper.Annotations, false)
+
 		if packageWrapper.Save {
-			err = cleanPackage(packageWrapper.Path, packageWrapper.ManualUpdate)
+			err = cleanPackage(packageWrapper.Path)
 			if err != nil {
 				logrus.Debug(err)
 			}
@@ -1475,7 +1313,7 @@ func hideChart(c *cli.Context) {
 func cleanCharts(c *cli.Context) {
 	packageList := generatePackageList(os.Getenv(packageEnvVariable))
 	for _, packageWrapper := range packageList {
-		err := cleanPackage(packageWrapper.Path, packageWrapper.ManualUpdate)
+		err := cleanPackage(packageWrapper.Path)
 		if err != nil {
 			logrus.Error(err)
 		}
