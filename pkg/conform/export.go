@@ -64,7 +64,9 @@ func ApplyOverlayFiles(packagePath string) error {
 		for _, dir := range dirList {
 			generatedPath := filepath.Join(packagePath, "charts", dir)
 			if _, err := os.Stat(generatedPath); os.IsNotExist(err) {
-				os.MkdirAll(generatedPath, 0755)
+				if err := os.MkdirAll(generatedPath, 0755); err != nil {
+					return fmt.Errorf("failed to mkdir %q: %w", generatedPath, err)
+				}
 			}
 		}
 
@@ -118,7 +120,9 @@ func LinkOverlayFiles(packagePath string) error {
 		for _, dir := range dirList {
 			generatedPath := filepath.Join(packagePath, generatedDir, overlayDir, dir)
 			if _, err := os.Stat(generatedPath); os.IsNotExist(err) {
-				os.MkdirAll(generatedPath, 0755)
+				if err := os.MkdirAll(generatedPath, 0755); err != nil {
+					return fmt.Errorf("failed to mkdir %q: %w", generatedPath, err)
+				}
 			}
 		}
 

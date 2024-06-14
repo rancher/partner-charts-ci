@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -56,7 +57,9 @@ func (packageYaml PackageYaml) Write(overWrite bool) error {
 		if !overWrite {
 			return nil
 		} else {
-			packageYaml.Remove()
+			if err := packageYaml.Remove(); err != nil {
+				return fmt.Errorf("failed to remove package.yaml: %w", err)
+			}
 		}
 	}
 
