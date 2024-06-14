@@ -111,43 +111,6 @@ func (p PackageList) Less(i, j int) bool {
 	return false
 }
 
-// Generates patch files from prepared chart
-func (packageWrapper PackageWrapper) patch() error {
-	var err error
-	var packageYaml *parse.PackageYaml
-	if !packageWrapper.ManualUpdate {
-		packageYaml, err = writePackageYaml(
-			packageWrapper.Path,
-			packageWrapper.UpstreamYaml.PackageVersion,
-			packageWrapper.SourceMetadata.Commit,
-			packageWrapper.SourceMetadata.SubDirectory,
-			packageWrapper.FetchVersions[0].URLs[0],
-			true,
-		)
-		if err != nil {
-			return err
-		}
-	}
-	pkg, err := generatePackage(packageWrapper.Path)
-	if err != nil {
-		return err
-	}
-	err = pkg.GeneratePatch()
-	if err != nil {
-		logrus.Error(err)
-		err = fmt.Errorf("unable to generate patch files")
-		return err
-	}
-
-	if !packageWrapper.ManualUpdate {
-		if err := packageYaml.Remove(); err != nil {
-			return fmt.Errorf("failed to remove package.yaml: %w", err)
-		}
-	}
-
-	return nil
-}
-
 func (packageWrapper *PackageWrapper) populateManual() (bool, error) {
 	//Preparing the chart to pull the actual release-name and version
 	err := prepareManualPackage(packageWrapper.Path)
@@ -595,25 +558,6 @@ func generatePackage(packagePath string) (*charts.Package, error) {
 	}
 
 	return pkg, nil
-}
-
-func writePackageYaml(packagePath string, packageVersion int, commit string, subdirectory string, url string, overWrite bool) (*parse.PackageYaml, error) {
-	logrus.Debugf("Generating package yaml in %s\n", packagePath)
-	packageYaml := parse.PackageYaml{
-		Commit:         commit,
-		PackageVersion: packageVersion,
-		Path:           packagePath,
-		SubDirectory:   subdirectory,
-		Url:            url,
-	}
-
-	logrus.Debugf("Writing package yaml in %s\n", packagePath)
-	err := packageYaml.Write(overWrite)
-	if err != nil {
-		logrus.Error(err)
-	}
-
-	return &packageYaml, nil
 }
 
 func collectTrackedVersions(upstreamVersions repo.ChartVersions, tracked []string) map[string]repo.ChartVersions {
@@ -1428,21 +1372,6 @@ func listPackages(c *cli.Context) {
 	}
 }
 
-// CLI function call - Generates patch files for package(s)
-func patchCharts(c *cli.Context) {
-	currentPackage := os.Getenv(packageEnvVariable)
-	packageList, err := populatePackages(currentPackage, false, false, true)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	for _, packageWrapper := range packageList {
-		err := packageWrapper.patch()
-		if err != nil {
-			logrus.Error(err)
-		}
-	}
-}
-
 // CLI function call - Appends annotaion to feature chart in Rancher UI
 func addFeaturedChart(c *cli.Context) {
 	if len(c.Args()) != 2 {
@@ -1778,12 +1707,6 @@ func main() {
 			// this should not be executed and pushed to production
 			// otherwise we will not have the icons updated at index.yaml.
 			// You should use the auto command instead.
-		},
-		{
-			Name:   "patch",
-			Usage:  "Generate patch files",
-			Action: patchCharts,
-			Hidden: true, // Hidden because this needs maintenance.
 		},
 		{
 			Name:   "clean",
