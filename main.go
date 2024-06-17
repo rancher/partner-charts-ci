@@ -199,12 +199,12 @@ func (packageWrapper *PackageWrapper) populate() (bool, error) {
 			return false, err
 		}
 
-		sourceMetadata, err := generateChartSourceMetadata(*packageWrapper.UpstreamYaml)
+		sourceMetadata, err := fetcher.FetchUpstream(*packageWrapper.UpstreamYaml)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("failed to fetch metadata from upstream: %w", err)
 		}
 
-		packageWrapper.SourceMetadata = sourceMetadata
+		packageWrapper.SourceMetadata = &sourceMetadata
 		packageWrapper.Name = sourceMetadata.Versions[0].Name
 		packageWrapper.Vendor, packageWrapper.ParsedVendor = parseVendor(packageWrapper.UpstreamYaml.Vendor, packageWrapper.Name, packageWrapper.Path)
 
@@ -721,16 +721,6 @@ func filterVersions(upstreamVersions repo.ChartVersions, fetch string, tracked [
 	}
 
 	return filteredVersions, nil
-}
-
-// Generates source metadata representation based on upstream repository
-func generateChartSourceMetadata(upstreamYaml parse.UpstreamYaml) (*fetcher.ChartSourceMetadata, error) {
-	sourceMetadata, err := fetcher.FetchUpstream(upstreamYaml)
-	if err != nil {
-		return nil, err
-	}
-
-	return &sourceMetadata, nil
 }
 
 func parseVendor(upstreamYamlVendor, chartName, packagePath string) (string, string) {
