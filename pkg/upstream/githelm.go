@@ -16,8 +16,12 @@ import (
 	"helm.sh/helm/v3/pkg/repo"
 )
 
+// A GitHelmUpstream is an Upstream that is a helm repo that is served
+// via git.
+type GitHelmUpstream struct{}
+
 // Constructs Chart Metadata for latest version published to Git Repository
-func fetchUpstreamGit(upstreamYaml parse.UpstreamYaml) (ChartSourceMetadata, error) {
+func (g GitHelmUpstream) Fetch(upstreamYaml parse.UpstreamYaml) (ChartSourceMetadata, error) {
 	var upstreamCommit string
 
 	clonePath, err := gitCloneToDirectory(upstreamYaml.GitRepoUrl, upstreamYaml.GitBranch, !upstreamYaml.GitHubRelease)

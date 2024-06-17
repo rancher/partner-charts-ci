@@ -14,8 +14,16 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// A GitHelmUpstream is an Upstream that is a helm repo that is served
+// via HTTPS.
+type HttpsHelmUpstream struct{}
+
 // Constructs Chart Metadata for latest version published to Helm Repository
-func fetchUpstreamHelmrepo(upstreamYaml parse.UpstreamYaml) (ChartSourceMetadata, error) {
+func (h HttpsHelmUpstream) Fetch(upstreamYaml parse.UpstreamYaml) (ChartSourceMetadata, error) {
+	return fetchUpstreamHelmRepo(upstreamYaml)
+}
+
+func fetchUpstreamHelmRepo(upstreamYaml parse.UpstreamYaml) (ChartSourceMetadata, error) {
 	upstreamYaml.HelmRepoUrl = strings.TrimSuffix(upstreamYaml.HelmRepoUrl, "/")
 	url := fmt.Sprintf("%s/index.yaml", upstreamYaml.HelmRepoUrl)
 

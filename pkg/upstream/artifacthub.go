@@ -9,6 +9,10 @@ import (
 	"github.com/rancher/partner-charts-ci/pkg/parse"
 )
 
+const (
+	artifactHubApi = "https://artifacthub.io/api/v1/packages/helm"
+)
+
 type ArtifactHubApiHelmRepo struct {
 	OrgDisplayName string `json:"organization_display_name,omitempty"`
 	OrgName        string `json:"organization_name,omitempty"`
@@ -21,8 +25,12 @@ type ArtifactHubApiHelm struct {
 	Repository ArtifactHubApiHelmRepo `json:"repository"`
 }
 
+// An ArtifactHubApiUpstream is an Upstream that gets helm charts from an
+// artifacthub.io repo.
+type ArtifactHubApiUpstream struct{}
+
 // Constructs Chart Metadata for latest version published to ArtifactHub
-func fetchUpstreamArtifacthub(upstreamYaml parse.UpstreamYaml) (ChartSourceMetadata, error) {
+func (a ArtifactHubApiUpstream) Fetch(upstreamYaml parse.UpstreamYaml) (ChartSourceMetadata, error) {
 	url := fmt.Sprintf("%s/%s/%s", artifactHubApi, upstreamYaml.AHRepoName, upstreamYaml.AHPackageName)
 
 	apiResp := ArtifactHubApiHelm{}
@@ -49,7 +57,7 @@ func fetchUpstreamArtifacthub(upstreamYaml parse.UpstreamYaml) (ChartSourceMetad
 	upstreamYaml.HelmRepoUrl = apiResp.Repository.Url
 	upstreamYaml.HelmChart = apiResp.Name
 
-	chartSourceMeta, err := fetchUpstreamHelmrepo(upstreamYaml)
+	chartSourceMeta, err := fetchUpstreamHelmRepo(upstreamYaml)
 	if err != nil {
 		return ChartSourceMetadata{}, err
 	}
@@ -57,5 +65,4 @@ func fetchUpstreamArtifacthub(upstreamYaml parse.UpstreamYaml) (ChartSourceMetad
 	chartSourceMeta.Source = "ArtifactHub"
 
 	return chartSourceMeta, nil
-
 }

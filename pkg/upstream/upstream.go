@@ -17,9 +17,10 @@ import (
 	"helm.sh/helm/v3/pkg/repo"
 )
 
-const (
-	artifactHubApi = "https://artifacthub.io/api/v1/packages/helm"
-)
+// An Upstream is a place from which upstream charts are retrieved.
+type Upstream interface {
+	Fetch(upstreamYaml parse.UpstreamYaml) (ChartSourceMetadata, error)
+}
 
 type ChartSourceMetadata struct {
 	Commit       string
@@ -78,17 +79,20 @@ func gitCheckoutCommit(path, commit string) error {
 }
 
 func FetchUpstream(upstreamYaml parse.UpstreamYaml) (ChartSourceMetadata, error) {
-	var err error
-	chartSourceMetadata := ChartSourceMetadata{}
+	var upstream Upstream
 	if upstreamYaml.AHRepoName != "" && upstreamYaml.AHPackageName != "" {
-		chartSourceMetadata, err = fetchUpstreamArtifacthub(upstreamYaml)
+		upstream = ArtifactHubApiUpstream{}
 	} else if upstreamYaml.HelmRepoUrl != "" && upstreamYaml.HelmChart != "" {
-		chartSourceMetadata, err = fetchUpstreamHelmrepo(upstreamYaml)
+		upstream = HttpsHelmUpstream{}
 	} else if upstreamYaml.GitRepoUrl != "" {
-		chartSourceMetadata, err = fetchUpstreamGit(upstreamYaml)
+		upstream = GitHelmUpstream{}
 	} else {
-		err := errors.New("no valid repo options found")
-		return ChartSourceMetadata{}, err
+		return ChartSourceMetadata{}, errors.New("failed to get upstream")
+	}
+
+	chartSourceMetadata, err := upstream.Fetch(upstreamYaml)
+	if err != nil {
+		return ChartSourceMetadata{}, fmt.Errorf("failed to fetch data from upstream: %w", err)
 	}
 
 	if upstreamYaml.ChartYaml.Name != "" {
