@@ -15,9 +15,9 @@ import (
 	"github.com/rancher/charts-build-scripts/pkg/charts"
 	"github.com/rancher/charts-build-scripts/pkg/filesystem"
 	"github.com/rancher/partner-charts-ci/pkg/conform"
-	"github.com/rancher/partner-charts-ci/pkg/fetcher"
 	"github.com/rancher/partner-charts-ci/pkg/icons"
 	"github.com/rancher/partner-charts-ci/pkg/parse"
+	"github.com/rancher/partner-charts-ci/pkg/upstream"
 	"github.com/rancher/partner-charts-ci/pkg/validate"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -81,7 +81,7 @@ type PackageWrapper struct {
 	//Indicator to write chart to disk
 	Save bool
 	//SourceMetadata represents metadata fetched from the upstream repository
-	SourceMetadata *fetcher.ChartSourceMetadata
+	SourceMetadata *upstream.ChartSourceMetadata
 	//UpstreamYaml represents the values set in the package's upstream.yaml file
 	UpstreamYaml *parse.UpstreamYaml
 	//Chart vendor
@@ -129,7 +129,7 @@ func (packageWrapper *PackageWrapper) populateManual() (bool, error) {
 		return false, err
 	}
 
-	sourceMetadata := fetcher.ChartSourceMetadata{
+	sourceMetadata := upstream.ChartSourceMetadata{
 		Source:   "direct",
 		Versions: make(repo.ChartVersions, 1),
 	}
@@ -199,7 +199,7 @@ func (packageWrapper *PackageWrapper) populate() (bool, error) {
 			return false, err
 		}
 
-		sourceMetadata, err := fetcher.FetchUpstream(*packageWrapper.UpstreamYaml)
+		sourceMetadata, err := upstream.FetchUpstream(*packageWrapper.UpstreamYaml)
 		if err != nil {
 			return false, fmt.Errorf("failed to fetch metadata from upstream: %w", err)
 		}
@@ -519,15 +519,15 @@ func prepareManualPackage(packagePath string) error {
 }
 
 // Prepares package for modification via patch and overlay
-func preparePackage(packagePath string, sourceMetadata *fetcher.ChartSourceMetadata, chartVersion *repo.ChartVersion) error {
+func preparePackage(packagePath string, sourceMetadata *upstream.ChartSourceMetadata, chartVersion *repo.ChartVersion) error {
 	var chart *chart.Chart
 	var err error
 	logrus.Debugf("Preparing package from %s", packagePath)
 
 	if sourceMetadata.Source == "Git" {
-		chart, err = fetcher.LoadChartFromGit(chartVersion.URLs[0], sourceMetadata.SubDirectory, sourceMetadata.Commit)
+		chart, err = upstream.LoadChartFromGit(chartVersion.URLs[0], sourceMetadata.SubDirectory, sourceMetadata.Commit)
 	} else {
-		chart, err = fetcher.LoadChartFromUrl(chartVersion.URLs[0])
+		chart, err = upstream.LoadChartFromUrl(chartVersion.URLs[0])
 	}
 	if err != nil {
 		return err
@@ -747,7 +747,7 @@ func parseVendor(upstreamYamlVendor, chartName, packagePath string) (string, str
 }
 
 // Prepares and standardizes chart, then returns loaded chart object
-func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetadata, chartVersion repo.ChartVersion, manualUpdate bool) (*chart.Chart, error) {
+func initializeChart(packagePath string, sourceMetadata upstream.ChartSourceMetadata, chartVersion repo.ChartVersion, manualUpdate bool) (*chart.Chart, error) {
 	var err error
 	if manualUpdate {
 		err = prepareManualPackage(packagePath)
