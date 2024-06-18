@@ -1143,11 +1143,9 @@ func generateChanges(auto bool, stage bool) {
 
 	skippedList := make([]string, 0)
 	for _, packageWrapper := range packageList {
-		err := conformPackage(packageWrapper)
-		if err != nil {
+		if err := conformPackage(packageWrapper); err != nil {
 			logrus.Error(err)
 			skippedList = append(skippedList, packageWrapper.Name)
-			continue
 		}
 	}
 	if len(skippedList) > 0 {
