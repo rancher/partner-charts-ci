@@ -1153,25 +1153,27 @@ func generateChanges(auto bool, stage bool) {
 		logrus.Fatal(err)
 	}
 
-	if len(packageList) > 0 {
-		skippedList := fetchUpstreams(packageList)
-		if len(skippedList) > 0 {
-			logrus.Errorf("Skipped due to error: %v", skippedList)
+	if len(packageList) == 0 {
+		return
+	}
+
+	skippedList := fetchUpstreams(packageList)
+	if len(skippedList) > 0 {
+		logrus.Errorf("Skipped due to error: %v", skippedList)
+	}
+	if len(skippedList) >= len(packageList) {
+		logrus.Fatalf("All packages skipped. Exiting...")
+	}
+	if auto || stage {
+		err = writeIndex()
+		if err != nil {
+			logrus.Error(err)
 		}
-		if len(skippedList) >= len(packageList) {
-			logrus.Fatalf("All packages skipped. Exiting...")
-		}
-		if auto || stage {
-			err = writeIndex()
-			if err != nil {
-				logrus.Error(err)
-			}
-		}
-		if auto {
-			err = commitChanges(packageList, false)
-			if err != nil {
-				logrus.Fatal(err)
-			}
+	}
+	if auto {
+		err = commitChanges(packageList, false)
+		if err != nil {
+			logrus.Fatal(err)
 		}
 	}
 }
