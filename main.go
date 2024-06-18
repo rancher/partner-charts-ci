@@ -826,15 +826,18 @@ func getLatestStoredVersion(chartName string) (repo.ChartVersion, error) {
 	return latestVersion, nil
 }
 
+// getByAnnotation gets all repo.ChartVersions from index.yaml that have
+// the specified annotation with the specified value. If value is "",
+// all repo.ChartVersions that have the specified annotation will be
+// returned, regardless of that annotation's value.
 func getByAnnotation(annotation, value string) map[string]repo.ChartVersions {
 	indexYaml, err := readIndex()
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("failed to read index.yaml: %s", err)
 	}
 	matchedVersions := make(map[string]repo.ChartVersions)
 
-	for chartName := range indexYaml.Entries {
-		entries := indexYaml.Entries[chartName]
+	for chartName, entries := range indexYaml.Entries {
 		for _, version := range entries {
 			appendVersion := false
 			if _, ok := version.Annotations[annotation]; ok {
