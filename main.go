@@ -931,22 +931,6 @@ func writeIndex() error {
 	return nil
 }
 
-// Fetches metadata from upstream repositories.
-// Return list of skipped packages
-func fetchUpstreams(packageList PackageList) []string {
-	skippedList := make([]string, 0)
-	for _, packageWrapper := range packageList {
-		err := conformPackage(packageWrapper)
-		if err != nil {
-			logrus.Error(err)
-			skippedList = append(skippedList, packageWrapper.Name)
-			continue
-		}
-	}
-
-	return skippedList
-}
-
 // Reads in upstream yaml file
 func parseUpstream(packagePath string) (*parse.UpstreamYaml, error) {
 	upstreamYaml, err := parse.ParseUpstreamYaml(packagePath)
@@ -1157,13 +1141,22 @@ func generateChanges(auto bool, stage bool) {
 		return
 	}
 
-	skippedList := fetchUpstreams(packageList)
+	skippedList := make([]string, 0)
+	for _, packageWrapper := range packageList {
+		err := conformPackage(packageWrapper)
+		if err != nil {
+			logrus.Error(err)
+			skippedList = append(skippedList, packageWrapper.Name)
+			continue
+		}
+	}
 	if len(skippedList) > 0 {
 		logrus.Errorf("Skipped due to error: %v", skippedList)
 	}
 	if len(skippedList) >= len(packageList) {
 		logrus.Fatalf("All packages skipped. Exiting...")
 	}
+
 	if auto || stage {
 		err = writeIndex()
 		if err != nil {
