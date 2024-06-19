@@ -158,9 +158,8 @@ func (packageWrapper *PackageWrapper) populate() (bool, error) {
 	return true, nil
 }
 
-func (packageWrapper PackageWrapper) annotate(annotation, value string, remove, onlyLatest bool) error {
+func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bool) error {
 	var versionsToUpdate repo.ChartVersions
-	chartName := packageWrapper.LatestStored.Name
 
 	allStoredVersions, err := getStoredVersions(chartName)
 	if err != nil {
@@ -179,13 +178,13 @@ func (packageWrapper PackageWrapper) annotate(annotation, value string, remove, 
 		assetsPath := filepath.Join(
 			getRepoRoot(),
 			repositoryAssetsDir,
-			packageWrapper.ParsedVendor,
+			vendor,
 		)
 
 		versionPath := path.Join(
 			getRepoRoot(),
 			repositoryChartsDir,
-			packageWrapper.ParsedVendor,
+			vendor,
 			chartName,
 		)
 		helmChart, err := loader.LoadFile(version.URLs[0])
@@ -200,7 +199,7 @@ func (packageWrapper PackageWrapper) annotate(annotation, value string, remove, 
 		}
 
 		if modified {
-			logrus.Debugf("Modified annotations of %s (%s)\n", packageWrapper.Name, helmChart.Metadata.Version)
+			logrus.Debugf("Modified annotations of %s (%s)\n", chartName, helmChart.Metadata.Version)
 
 			err = os.RemoveAll(versionPath)
 			if err != nil {
@@ -693,7 +692,8 @@ func conformPackage(packageWrapper PackageWrapper) error {
 		if val, ok := getByAnnotation(annotationFeatured, "")[packageWrapper.Name]; ok {
 			logrus.Debugf("Migrating featured annotation to latest version %s\n", packageWrapper.Name)
 			featuredIndex := val[0].Annotations[annotationFeatured]
-			if err := packageWrapper.annotate(annotationFeatured, "", true, false); err != nil {
+			err := annotate(packageWrapper.ParsedVendor, packageWrapper.LatestStored.Name, annotationFeatured, "", true, false)
+			if err != nil {
 				return fmt.Errorf("failed to annotate package: %w", err)
 			}
 			annotations[annotationFeatured] = featuredIndex
@@ -1213,7 +1213,9 @@ func addFeaturedChart(c *cli.Context) {
 			logrus.Errorf("%s already featured at index %d\n", chartName, featuredNumber)
 		}
 	} else {
-		err = packageList[0].annotate(annotationFeatured, c.Args().Get(1), false, true)
+		vendor := packageList[0].ParsedVendor
+		chartName := packageList[0].LatestStored.Name
+		err = annotate(vendor, chartName, annotationFeatured, c.Args().Get(1), false, true)
 		if err != nil {
 			logrus.Fatal(err)
 		}
@@ -1239,7 +1241,9 @@ func removeFeaturedChart(c *cli.Context) {
 		logrus.Fatal(err)
 	}
 
-	err = packageList[0].annotate(annotationFeatured, "", true, false)
+	vendor := packageList[0].ParsedVendor
+	chartName := packageList[0].LatestStored.Name
+	err = annotate(vendor, chartName, annotationFeatured, "", true, false)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -1287,7 +1291,9 @@ func hideChart(c *cli.Context) {
 		}
 
 		if len(packageList) == 1 {
-			err = packageList[0].annotate(annotationHidden, "true", false, false)
+			vendor := packageList[0].ParsedVendor
+			chartName := packageList[0].LatestStored.Name
+			err = annotate(vendor, chartName, annotationHidden, "true", false, false)
 			if err != nil {
 				logrus.Error(err)
 			}
