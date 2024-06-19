@@ -223,8 +223,6 @@ func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bo
 
 	}
 
-	err = writeIndex()
-
 	return err
 }
 
@@ -695,6 +693,9 @@ func conformPackage(packageWrapper PackageWrapper) error {
 			err := annotate(packageWrapper.ParsedVendor, packageWrapper.LatestStored.Name, annotationFeatured, "", true, false)
 			if err != nil {
 				return fmt.Errorf("failed to annotate package: %w", err)
+			}
+			if err = writeIndex(); err != nil {
+				return fmt.Errorf("failed to write index: %w", err)
 			}
 			annotations[annotationFeatured] = featuredIndex
 		}
@@ -1219,6 +1220,9 @@ func addFeaturedChart(c *cli.Context) {
 		if err != nil {
 			logrus.Fatal(err)
 		}
+		if err = writeIndex(); err != nil {
+			logrus.Fatalf("failed to write index: %s", err)
+		}
 	}
 }
 
@@ -1246,6 +1250,9 @@ func removeFeaturedChart(c *cli.Context) {
 	err = annotate(vendor, chartName, annotationFeatured, "", true, false)
 	if err != nil {
 		logrus.Fatal(err)
+	}
+	if err = writeIndex(); err != nil {
+		logrus.Fatalf("failed to write index: %s", err)
 	}
 }
 
@@ -1296,6 +1303,9 @@ func hideChart(c *cli.Context) {
 			err = annotate(vendor, chartName, annotationHidden, "true", false, false)
 			if err != nil {
 				logrus.Error(err)
+			}
+			if err = writeIndex(); err != nil {
+				logrus.Fatalf("failed to write index: %s", err)
 			}
 		}
 	}
