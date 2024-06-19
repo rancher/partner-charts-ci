@@ -22,6 +22,7 @@ import (
 
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/repo"
 )
 
@@ -206,9 +207,9 @@ func (packageWrapper PackageWrapper) annotate(annotation, value string, remove, 
 				return err
 			}
 
-			err = conform.ExportChartAsset(helmChart, assetsPath)
+			_, err := chartutil.Save(helmChart, assetsPath)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to save chart %q version %q: %w", helmChart.Name(), helmChart.Metadata.Version, err)
 			}
 			err = conform.ExportChartDirectory(helmChart, versionPath)
 			if err != nil {
@@ -751,23 +752,14 @@ func conformPackage(packageWrapper PackageWrapper) error {
 	return err
 }
 
-// getAssetFilename gets the filename for a helm chart as used
-// in an assets/<vendor> directory.
-func getAssetFilename(name, version string) string {
-	return fmt.Sprintf("%s-%s.tgz", name, version)
-}
-
 // Saves chart to disk as asset gzip and directory
 func saveChart(helmChart *chart.Chart, assetsPath, chartsPath string) error {
 
 	logrus.Debugf("Exporting chart assets to %s\n", assetsPath)
-	err := conform.ExportChartAsset(helmChart, assetsPath)
+	assetFile, err := chartutil.Save(helmChart, assetsPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to save chart %q version %q: %w", helmChart.Name(), helmChart.Metadata.Version, err)
 	}
-
-	assetFile := getAssetFilename(helmChart.Name(), helmChart.Metadata.Version)
-	assetFile = path.Join(assetsPath, assetFile)
 
 	err = conform.Gunzip(assetFile, chartsPath)
 	if err != nil {
