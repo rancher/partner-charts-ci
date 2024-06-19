@@ -56,8 +56,6 @@ var (
 
 // PackageWrapper is a representation of relevant package metadata
 type PackageWrapper struct {
-	//Additional Chart annotations
-	Annotations map[string]string
 	//Chart Display Name
 	DisplayName string
 	//Filtered subset of versions to-be-fetched
@@ -661,17 +659,18 @@ func conformPackage(packageWrapper PackageWrapper) error {
 		if err != nil {
 			return err
 		}
+		annotations := make(map[string]string)
 
 		if autoInstall := packageWrapper.UpstreamYaml.AutoInstall; autoInstall != "" {
-			packageWrapper.Annotations[annotationAutoInstall] = autoInstall
+			annotations[annotationAutoInstall] = autoInstall
 		}
 
 		if packageWrapper.UpstreamYaml.Experimental {
-			packageWrapper.Annotations[annotationExperimental] = "true"
+			annotations[annotationExperimental] = "true"
 		}
 
 		if packageWrapper.UpstreamYaml.Hidden {
-			packageWrapper.Annotations[annotationHidden] = "true"
+			annotations[annotationHidden] = "true"
 		}
 
 		if !packageWrapper.UpstreamYaml.RemoteDependencies {
@@ -680,12 +679,12 @@ func conformPackage(packageWrapper PackageWrapper) error {
 			}
 		}
 
-		packageWrapper.Annotations[annotationCertified] = "partner"
-		packageWrapper.Annotations[annotationDisplayName] = packageWrapper.DisplayName
+		annotations[annotationCertified] = "partner"
+		annotations[annotationDisplayName] = packageWrapper.DisplayName
 		if packageWrapper.UpstreamYaml.ReleaseName != "" {
-			packageWrapper.Annotations[annotationReleaseName] = packageWrapper.UpstreamYaml.ReleaseName
+			annotations[annotationReleaseName] = packageWrapper.UpstreamYaml.ReleaseName
 		} else {
-			packageWrapper.Annotations[annotationReleaseName] = packageWrapper.Name
+			annotations[annotationReleaseName] = packageWrapper.Name
 		}
 
 		conform.OverlayChartMetadata(helmChart, packageWrapper.UpstreamYaml.ChartYaml)
@@ -696,19 +695,19 @@ func conformPackage(packageWrapper PackageWrapper) error {
 			if err := packageWrapper.annotate(annotationFeatured, "", true, false); err != nil {
 				return fmt.Errorf("failed to annotate package: %w", err)
 			}
-			packageWrapper.Annotations[annotationFeatured] = featuredIndex
+			annotations[annotationFeatured] = featuredIndex
 		}
 
 		if packageWrapper.UpstreamYaml.Namespace != "" {
-			packageWrapper.Annotations[annotationNamespace] = packageWrapper.UpstreamYaml.Namespace
+			annotations[annotationNamespace] = packageWrapper.UpstreamYaml.Namespace
 		}
 		if helmChart.Metadata.KubeVersion != "" && packageWrapper.UpstreamYaml.ChartYaml.KubeVersion != "" {
-			packageWrapper.Annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
+			annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
 			helmChart.Metadata.KubeVersion = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
 		} else if helmChart.Metadata.KubeVersion != "" {
-			packageWrapper.Annotations[annotationKubeVersion] = helmChart.Metadata.KubeVersion
+			annotations[annotationKubeVersion] = helmChart.Metadata.KubeVersion
 		} else if packageWrapper.UpstreamYaml.ChartYaml.KubeVersion != "" {
-			packageWrapper.Annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
+			annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
 		}
 
 		if packageVersion := packageWrapper.UpstreamYaml.PackageVersion; packageVersion != 0 {
@@ -718,7 +717,7 @@ func conformPackage(packageWrapper PackageWrapper) error {
 			}
 		}
 
-		conform.ApplyChartAnnotations(helmChart, packageWrapper.Annotations, false)
+		conform.ApplyChartAnnotations(helmChart, annotations, false)
 
 		if packageWrapper.Save {
 			err = cleanPackage(packageWrapper.Path)
@@ -976,7 +975,6 @@ func generatePackageList(currentPackage string) PackageList {
 func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, print bool) (PackageList, error) {
 	packageList := make(PackageList, 0)
 	for _, packageWrapper := range generatePackageList(currentPackage) {
-		packageWrapper.Annotations = make(map[string]string)
 		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
 		if onlyLatest {
 			packageWrapper.OnlyLatest = true
