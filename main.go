@@ -61,8 +61,6 @@ type PackageWrapper struct {
 	DisplayName string
 	//Filtered subset of versions to-be-fetched
 	FetchVersions repo.ChartVersions
-	//Indicator to generate patch files
-	GenPatch bool
 	//Path stores the package path in current repository
 	Path string
 	//LatestStored stores the latest version of the chart currently in the repo
@@ -1121,7 +1119,6 @@ func generateChanges(auto bool, stage bool) {
 	if auto || stage {
 		packageList, err = populatePackages(currentPackage, true, false, true)
 		for i := range packageList {
-			packageList[i].GenPatch = true
 			packageList[i].Save = true
 		}
 	} else {
