@@ -67,8 +67,6 @@ type PackageWrapper struct {
 	LatestStored repo.ChartVersion
 	//Chart name
 	Name string
-	//Untracked upstream versions newer than latest tracked
-	NewerUntracked []*semver.Version
 	//SourceMetadata represents metadata fetched from the upstream repository
 	SourceMetadata *fetcher.ChartSourceMetadata
 	//UpstreamYaml represents the values set in the package's upstream.yaml file
