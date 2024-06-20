@@ -71,8 +71,6 @@ type PackageWrapper struct {
 	NewerUntracked []*semver.Version
 	//Force only pulling the latest version
 	OnlyLatest bool
-	//Indicator to write chart to disk
-	Save bool
 	//SourceMetadata represents metadata fetched from the upstream repository
 	SourceMetadata *fetcher.ChartSourceMetadata
 	//UpstreamYaml represents the values set in the package's upstream.yaml file
@@ -641,8 +639,9 @@ func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetad
 	return helmChart, nil
 }
 
-// Mutates chart with necessary alterations for repository
-func conformPackage(packageWrapper PackageWrapper) error {
+// Mutates chart with necessary alterations for repository. Only writes
+// the chart to disk if writeChart is true.
+func conformPackage(packageWrapper PackageWrapper, writeChart bool) error {
 	var err error
 	logrus.Debugf("Conforming package from %s\n", packageWrapper.Path)
 	for _, chartVersion := range packageWrapper.FetchVersions {
@@ -719,7 +718,7 @@ func conformPackage(packageWrapper PackageWrapper) error {
 
 		conform.ApplyChartAnnotations(helmChart, annotations, false)
 
-		if packageWrapper.Save {
+		if writeChart {
 			err = cleanPackage(packageWrapper.Path)
 			if err != nil {
 				logrus.Debug(err)
@@ -1118,9 +1117,6 @@ func generateChanges(auto bool, stage bool) {
 	var err error
 	if auto || stage {
 		packageList, err = populatePackages(currentPackage, true, false, true)
-		for i := range packageList {
-			packageList[i].Save = true
-		}
 	} else {
 		packageList, err = populatePackages(currentPackage, false, true, true)
 	}
@@ -1134,7 +1130,7 @@ func generateChanges(auto bool, stage bool) {
 
 	skippedList := make([]string, 0)
 	for _, packageWrapper := range packageList {
-		if err := conformPackage(packageWrapper); err != nil {
+		if err := conformPackage(packageWrapper, auto || stage); err != nil {
 			logrus.Error(err)
 			skippedList = append(skippedList, packageWrapper.Name)
 		}
