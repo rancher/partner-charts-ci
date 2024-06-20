@@ -69,8 +69,6 @@ type PackageWrapper struct {
 	Name string
 	//Untracked upstream versions newer than latest tracked
 	NewerUntracked []*semver.Version
-	//Force only pulling the latest version
-	OnlyLatest bool
 	//SourceMetadata represents metadata fetched from the upstream repository
 	SourceMetadata *fetcher.ChartSourceMetadata
 	//UpstreamYaml represents the values set in the package's upstream.yaml file
@@ -102,10 +100,11 @@ func (p PackageList) Less(i, j int) bool {
 	return false
 }
 
-// Populates package wrapper with relevant data from upstream, checks for updates,
-// writes out package yaml file, and generates package object
-// Returns true if newer package version is available
-func (packageWrapper *PackageWrapper) populate() (bool, error) {
+// Populates PackageWrapper with relevant data from upstream and
+// checks for updates. If onlyLatest is true, then it puts only the
+// latest upstream chart version in PackageWrapper.FetchVersions.
+// Returns true if newer package version is available.
+func (packageWrapper *PackageWrapper) populate(onlyLatest bool) (bool, error) {
 	var err error
 	packageWrapper.UpstreamYaml, err = parseUpstream(packageWrapper.Path)
 	if err != nil {
@@ -121,7 +120,7 @@ func (packageWrapper *PackageWrapper) populate() (bool, error) {
 	packageWrapper.Name = sourceMetadata.Versions[0].Name
 	packageWrapper.Vendor, packageWrapper.ParsedVendor = parseVendor(packageWrapper.UpstreamYaml.Vendor, packageWrapper.Name, packageWrapper.Path)
 
-	if packageWrapper.OnlyLatest {
+	if onlyLatest {
 		packageWrapper.UpstreamYaml.Fetch = "latest"
 		if packageWrapper.UpstreamYaml.TrackVersions != nil {
 			packageWrapper.UpstreamYaml.TrackVersions = []string{packageWrapper.UpstreamYaml.TrackVersions[0]}
@@ -131,7 +130,8 @@ func (packageWrapper *PackageWrapper) populate() (bool, error) {
 	packageWrapper.FetchVersions, err = filterVersions(
 		packageWrapper.SourceMetadata.Versions,
 		packageWrapper.UpstreamYaml.Fetch,
-		packageWrapper.UpstreamYaml.TrackVersions)
+		packageWrapper.UpstreamYaml.TrackVersions,
+	)
 	if err != nil {
 		return false, err
 	}
@@ -966,10 +966,7 @@ func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, 
 	packageList := make(PackageList, 0)
 	for _, packageWrapper := range generatePackageList(currentPackage) {
 		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
-		if onlyLatest {
-			packageWrapper.OnlyLatest = true
-		}
-		updated, err := packageWrapper.populate()
+		updated, err := packageWrapper.populate(onlyLatest)
 		if err != nil {
 			logrus.Error(err)
 			continue
