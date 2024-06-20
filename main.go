@@ -103,11 +103,11 @@ func (p PackageList) Less(i, j int) bool {
 // latest upstream chart version in PackageWrapper.FetchVersions.
 // Returns true if newer package version is available.
 func (packageWrapper *PackageWrapper) populate(onlyLatest bool) (bool, error) {
-	var err error
-	packageWrapper.UpstreamYaml, err = parseUpstream(packageWrapper.Path)
+	upstreamYaml, err := parse.ParseUpstreamYaml(packageWrapper.Path)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to parse upstream.yaml: %w", err)
 	}
+	packageWrapper.UpstreamYaml = &upstreamYaml
 
 	sourceMetadata, err := generateChartSourceMetadata(*packageWrapper.UpstreamYaml)
 	if err != nil {
@@ -919,16 +919,6 @@ func writeIndex() error {
 	}
 
 	return nil
-}
-
-// Reads in upstream yaml file
-func parseUpstream(packagePath string) (*parse.UpstreamYaml, error) {
-	upstreamYaml, err := parse.ParseUpstreamYaml(packagePath)
-	if err != nil {
-		return nil, err
-	}
-
-	return &upstreamYaml, nil
 }
 
 // Generates list of package paths with upstream yaml available
