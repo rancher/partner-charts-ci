@@ -199,35 +199,27 @@ func ExportChartDirectory(chart *chart.Chart, targetPath string) error {
 	if err != nil {
 		return err
 	}
+	defer os.RemoveAll(tempDir)
 
-	tgz, err := chartutil.Save(chart, tempDir)
+	tgzPath, err := chartutil.Save(chart, tempDir)
 	if err != nil {
-		err = fmt.Errorf("Unable to save chart archive to %s", tempDir)
-		return err
+		return fmt.Errorf("failed to save chart archive to %s", tempDir)
 	}
 
 	chartOutputPath := filepath.Join(tempDir, chart.Name())
-
-	if err = Gunzip(tgz, chartOutputPath); err != nil {
-		return err
+	if err := Gunzip(tgzPath, chartOutputPath); err != nil {
+		return fmt.Errorf("failed to unzip %q to %q: %w", tgzPath, chartOutputPath, err)
 	}
 
-	if _, err := os.Stat(targetPath); !os.IsNotExist(err) {
-		os.RemoveAll(targetPath)
+	if err := os.RemoveAll(targetPath); err != nil {
+		return fmt.Errorf("failed to remove targetPath %q: %w", targetPath, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		return fmt.Errorf("failed to create targetPath %q: %w", targetPath, err)
 	}
 
-	if err = os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-		return err
-	}
-
-	err = os.Rename(chartOutputPath, targetPath)
-	if err != nil {
-		return err
-	}
-
-	err = os.RemoveAll(tempDir)
-	if err != nil {
-		return err
+	if err = os.Rename(chartOutputPath, targetPath); err != nil {
+		return fmt.Errorf("failed to move %q to %q: %w", chartOutputPath, targetPath, err)
 	}
 
 	return nil
