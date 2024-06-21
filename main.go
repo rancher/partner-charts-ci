@@ -385,35 +385,6 @@ func cleanPackage(packagePath string) error {
 	return nil
 }
 
-// Prepares package for modification via patch and overlay
-func preparePackage(packagePath string, sourceMetadata *fetcher.ChartSourceMetadata, chartVersion *repo.ChartVersion) error {
-	var chart *chart.Chart
-	var err error
-	logrus.Debugf("Preparing package from %s", packagePath)
-
-	if sourceMetadata.Source == "Git" {
-		chart, err = fetcher.LoadChartFromGit(chartVersion.URLs[0], sourceMetadata.SubDirectory, sourceMetadata.Commit)
-	} else {
-		chart, err = fetcher.LoadChartFromUrl(chartVersion.URLs[0])
-	}
-	if err != nil {
-		return err
-	}
-
-	exportPath := path.Join(packagePath, repositoryChartsDir)
-	err = conform.ExportChartDirectory(chart, exportPath)
-	if err != nil {
-		logrus.Error(err)
-	}
-
-	patchOrigPath := path.Join(packagePath, repositoryChartsDir, "Chart.yaml.orig")
-	if err := os.RemoveAll(patchOrigPath); err != nil {
-		return fmt.Errorf("failed to remove %q: %w", patchOrigPath, err)
-	}
-
-	return nil
-}
-
 func collectTrackedVersions(upstreamVersions repo.ChartVersions, tracked []string) map[string]repo.ChartVersions {
 	trackedVersions := make(map[string]repo.ChartVersions)
 
@@ -612,9 +583,23 @@ func parseVendor(upstreamYamlVendor, chartName, packagePath string) (string, str
 
 // Prepares and standardizes chart, then returns loaded chart object
 func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetadata, chartVersion repo.ChartVersion) (*chart.Chart, error) {
+	logrus.Debugf("Preparing package from %s", packagePath)
+	chartDirectoryPath := path.Join(packagePath, repositoryChartsDir)
+
+	var chartWithoutOverlayFiles *chart.Chart
 	var err error
-	if err := preparePackage(packagePath, &sourceMetadata, &chartVersion); err != nil {
+	if sourceMetadata.Source == "Git" {
+		chartWithoutOverlayFiles, err = fetcher.LoadChartFromGit(chartVersion.URLs[0], sourceMetadata.SubDirectory, sourceMetadata.Commit)
+	} else {
+		chartWithoutOverlayFiles, err = fetcher.LoadChartFromUrl(chartVersion.URLs[0])
+	}
+	if err != nil {
 		return nil, err
+	}
+
+	err = conform.ExportChartDirectory(chartWithoutOverlayFiles, chartDirectoryPath)
+	if err != nil {
+		logrus.Error(err)
 	}
 
 	err = conform.ApplyOverlayFiles(packagePath)
@@ -622,7 +607,6 @@ func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetad
 		return nil, err
 	}
 
-	chartDirectoryPath := path.Join(packagePath, repositoryChartsDir)
 	helmChart, err := loader.Load(chartDirectoryPath)
 	if err != nil {
 		return nil, err
