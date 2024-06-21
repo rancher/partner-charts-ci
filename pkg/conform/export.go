@@ -11,7 +11,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 )
 
@@ -153,22 +152,6 @@ func RemoveOverlayFiles(packagePath string) error {
 	}
 
 	return nil
-}
-
-// Load and Unloads Chart to ensure consistent layout for overlay
-func StandardizeChartDirectory(sourcePath string, targetPath string) error {
-	helmChart, err := loader.Load(sourcePath)
-	if err != nil {
-		return fmt.Errorf("failed to load chart directory: %w", err)
-	}
-
-	if targetPath == "" {
-		targetPath = sourcePath
-		os.RemoveAll(sourcePath)
-	}
-
-	return ExportChartDirectory(helmChart, targetPath)
-
 }
 
 func ExportChartDirectory(chart *chart.Chart, targetPath string) error {

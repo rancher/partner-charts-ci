@@ -617,16 +617,12 @@ func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetad
 		return nil, err
 	}
 
-	chartDirectoryPath := path.Join(packagePath, repositoryChartsDir)
-	if err := conform.StandardizeChartDirectory(chartDirectoryPath, ""); err != nil {
-		return nil, fmt.Errorf("failed to standardize chart directory: %w", err)
-	}
-
 	err = conform.ApplyOverlayFiles(packagePath)
 	if err != nil {
 		return nil, err
 	}
 
+	chartDirectoryPath := path.Join(packagePath, repositoryChartsDir)
 	helmChart, err := loader.Load(chartDirectoryPath)
 	if err != nil {
 		return nil, err
