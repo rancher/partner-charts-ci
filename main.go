@@ -407,8 +407,8 @@ func preparePackage(packagePath string, sourceMetadata *fetcher.ChartSourceMetad
 	}
 
 	patchOrigPath := path.Join(packagePath, repositoryChartsDir, "Chart.yaml.orig")
-	if _, err := os.Stat(patchOrigPath); !os.IsNotExist(err) {
-		os.Remove(patchOrigPath)
+	if err := os.RemoveAll(patchOrigPath); err != nil {
+		return fmt.Errorf("failed to remove %q: %w", patchOrigPath, err)
 	}
 
 	return nil
@@ -733,8 +733,8 @@ func conformPackage(packageWrapper PackageWrapper, writeChart bool) error {
 				packageWrapper.ParsedVendor,
 				helmChart.Metadata.Name)
 
-			if _, err := os.Stat(chartsPath); !os.IsNotExist(err) {
-				os.RemoveAll(chartsPath)
+			if err := os.RemoveAll(chartsPath); err != nil {
+				return fmt.Errorf("failed to remove chartsPath %q: %w", chartsPath, err)
 			}
 
 			err = saveChart(helmChart, assetsPath, chartsPath)
@@ -1064,13 +1064,9 @@ func parsePackageListToPackageIconList(packageList PackageList) icons.PackageIco
 // overwriteIndexIconsAndTestChanges will overwrite the index.yaml icon fields with the new downloaded icons path
 func overwriteIndexIconsAndTestChanges(packageIconList icons.PackageIconList) error {
 	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
-	if _, err := os.Stat(indexFilePath); os.IsNotExist(err) {
-		return err
-	}
-
 	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load index file: %w", err)
 	}
 	assetsDirectoryPath := filepath.Join(getRepoRoot(), repositoryAssetsDir)
 	newHelmIndexYaml, err := repo.IndexDirectory(assetsDirectoryPath, repositoryAssetsDir)
@@ -1341,12 +1337,9 @@ func validateRepo(c *cli.Context) {
 	directoryComparison := validate.DirectoryComparison{}
 
 	configYamlPath := path.Join(getRepoRoot(), configOptionsFile)
-	if _, err := os.Stat(configYamlPath); os.IsNotExist(err) {
-		logrus.Fatalf("Unable to read %s\n", configOptionsFile)
-	}
 	configYaml, err := validate.ReadConfig(configYamlPath)
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("failed to read %s: %s\n", configOptionsFile, err)
 	}
 
 	if len(configYaml.Validate) == 0 || configYaml.Validate[0].Branch == "" || configYaml.Validate[0].Url == "" {
