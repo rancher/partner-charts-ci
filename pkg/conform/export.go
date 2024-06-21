@@ -189,15 +189,6 @@ func StandardizeChartDirectory(sourcePath string, targetPath string) error {
 
 }
 
-func ExportChartAsset(helmChart *chart.Chart, targetPath string) error {
-	_, err := chartutil.Save(helmChart, targetPath)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func ExportChartDirectory(chart *chart.Chart, targetPath string) error {
 	wd, err := os.Getwd()
 	if err != nil {

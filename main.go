@@ -22,6 +22,7 @@ import (
 
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
+	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/repo"
 )
 
@@ -56,26 +57,16 @@ var (
 
 // PackageWrapper is a representation of relevant package metadata
 type PackageWrapper struct {
-	//Additional Chart annotations
-	Annotations map[string]string
 	//Chart Display Name
 	DisplayName string
 	//Filtered subset of versions to-be-fetched
 	FetchVersions repo.ChartVersions
-	//Indicator to generate patch files
-	GenPatch bool
 	//Path stores the package path in current repository
 	Path string
 	//LatestStored stores the latest version of the chart currently in the repo
 	LatestStored repo.ChartVersion
 	//Chart name
 	Name string
-	//Untracked upstream versions newer than latest tracked
-	NewerUntracked []*semver.Version
-	//Force only pulling the latest version
-	OnlyLatest bool
-	//Indicator to write chart to disk
-	Save bool
 	//SourceMetadata represents metadata fetched from the upstream repository
 	SourceMetadata *fetcher.ChartSourceMetadata
 	//UpstreamYaml represents the values set in the package's upstream.yaml file
@@ -107,15 +98,16 @@ func (p PackageList) Less(i, j int) bool {
 	return false
 }
 
-// Populates package wrapper with relevant data from upstream, checks for updates,
-// writes out package yaml file, and generates package object
-// Returns true if newer package version is available
-func (packageWrapper *PackageWrapper) populate() (bool, error) {
-	var err error
-	packageWrapper.UpstreamYaml, err = parseUpstream(packageWrapper.Path)
+// Populates PackageWrapper with relevant data from upstream and
+// checks for updates. If onlyLatest is true, then it puts only the
+// latest upstream chart version in PackageWrapper.FetchVersions.
+// Returns true if newer package version is available.
+func (packageWrapper *PackageWrapper) populate(onlyLatest bool) (bool, error) {
+	upstreamYaml, err := parse.ParseUpstreamYaml(packageWrapper.Path)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to parse upstream.yaml: %w", err)
 	}
+	packageWrapper.UpstreamYaml = &upstreamYaml
 
 	sourceMetadata, err := generateChartSourceMetadata(*packageWrapper.UpstreamYaml)
 	if err != nil {
@@ -126,7 +118,7 @@ func (packageWrapper *PackageWrapper) populate() (bool, error) {
 	packageWrapper.Name = sourceMetadata.Versions[0].Name
 	packageWrapper.Vendor, packageWrapper.ParsedVendor = parseVendor(packageWrapper.UpstreamYaml.Vendor, packageWrapper.Name, packageWrapper.Path)
 
-	if packageWrapper.OnlyLatest {
+	if onlyLatest {
 		packageWrapper.UpstreamYaml.Fetch = "latest"
 		if packageWrapper.UpstreamYaml.TrackVersions != nil {
 			packageWrapper.UpstreamYaml.TrackVersions = []string{packageWrapper.UpstreamYaml.TrackVersions[0]}
@@ -136,7 +128,8 @@ func (packageWrapper *PackageWrapper) populate() (bool, error) {
 	packageWrapper.FetchVersions, err = filterVersions(
 		packageWrapper.SourceMetadata.Versions,
 		packageWrapper.UpstreamYaml.Fetch,
-		packageWrapper.UpstreamYaml.TrackVersions)
+		packageWrapper.UpstreamYaml.TrackVersions,
+	)
 	if err != nil {
 		return false, err
 	}
@@ -159,9 +152,8 @@ func (packageWrapper *PackageWrapper) populate() (bool, error) {
 	return true, nil
 }
 
-func (packageWrapper PackageWrapper) annotate(annotation, value string, remove, onlyLatest bool) error {
+func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bool) error {
 	var versionsToUpdate repo.ChartVersions
-	chartName := packageWrapper.LatestStored.Name
 
 	allStoredVersions, err := getStoredVersions(chartName)
 	if err != nil {
@@ -180,13 +172,13 @@ func (packageWrapper PackageWrapper) annotate(annotation, value string, remove, 
 		assetsPath := filepath.Join(
 			getRepoRoot(),
 			repositoryAssetsDir,
-			packageWrapper.ParsedVendor,
+			vendor,
 		)
 
 		versionPath := path.Join(
 			getRepoRoot(),
 			repositoryChartsDir,
-			packageWrapper.ParsedVendor,
+			vendor,
 			chartName,
 		)
 		helmChart, err := loader.LoadFile(version.URLs[0])
@@ -201,16 +193,16 @@ func (packageWrapper PackageWrapper) annotate(annotation, value string, remove, 
 		}
 
 		if modified {
-			logrus.Debugf("Modified annotations of %s (%s)\n", packageWrapper.Name, helmChart.Metadata.Version)
+			logrus.Debugf("Modified annotations of %s (%s)\n", chartName, helmChart.Metadata.Version)
 
 			err = os.RemoveAll(versionPath)
 			if err != nil {
 				return err
 			}
 
-			err = conform.ExportChartAsset(helmChart, assetsPath)
+			_, err := chartutil.Save(helmChart, assetsPath)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to save chart %q version %q: %w", helmChart.Name(), helmChart.Metadata.Version, err)
 			}
 			err = conform.ExportChartDirectory(helmChart, versionPath)
 			if err != nil {
@@ -224,8 +216,6 @@ func (packageWrapper PackageWrapper) annotate(annotation, value string, remove, 
 		}
 
 	}
-
-	err = writeIndex()
 
 	return err
 }
@@ -647,8 +637,9 @@ func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetad
 	return helmChart, nil
 }
 
-// Mutates chart with necessary alterations for repository
-func conformPackage(packageWrapper PackageWrapper) error {
+// Mutates chart with necessary alterations for repository. Only writes
+// the chart to disk if writeChart is true.
+func conformPackage(packageWrapper PackageWrapper, writeChart bool) error {
 	var err error
 	logrus.Debugf("Conforming package from %s\n", packageWrapper.Path)
 	for _, chartVersion := range packageWrapper.FetchVersions {
@@ -661,17 +652,18 @@ func conformPackage(packageWrapper PackageWrapper) error {
 		if err != nil {
 			return err
 		}
+		annotations := make(map[string]string)
 
 		if autoInstall := packageWrapper.UpstreamYaml.AutoInstall; autoInstall != "" {
-			packageWrapper.Annotations[annotationAutoInstall] = autoInstall
+			annotations[annotationAutoInstall] = autoInstall
 		}
 
 		if packageWrapper.UpstreamYaml.Experimental {
-			packageWrapper.Annotations[annotationExperimental] = "true"
+			annotations[annotationExperimental] = "true"
 		}
 
 		if packageWrapper.UpstreamYaml.Hidden {
-			packageWrapper.Annotations[annotationHidden] = "true"
+			annotations[annotationHidden] = "true"
 		}
 
 		if !packageWrapper.UpstreamYaml.RemoteDependencies {
@@ -680,12 +672,12 @@ func conformPackage(packageWrapper PackageWrapper) error {
 			}
 		}
 
-		packageWrapper.Annotations[annotationCertified] = "partner"
-		packageWrapper.Annotations[annotationDisplayName] = packageWrapper.DisplayName
+		annotations[annotationCertified] = "partner"
+		annotations[annotationDisplayName] = packageWrapper.DisplayName
 		if packageWrapper.UpstreamYaml.ReleaseName != "" {
-			packageWrapper.Annotations[annotationReleaseName] = packageWrapper.UpstreamYaml.ReleaseName
+			annotations[annotationReleaseName] = packageWrapper.UpstreamYaml.ReleaseName
 		} else {
-			packageWrapper.Annotations[annotationReleaseName] = packageWrapper.Name
+			annotations[annotationReleaseName] = packageWrapper.Name
 		}
 
 		conform.OverlayChartMetadata(helmChart, packageWrapper.UpstreamYaml.ChartYaml)
@@ -693,22 +685,26 @@ func conformPackage(packageWrapper PackageWrapper) error {
 		if val, ok := getByAnnotation(annotationFeatured, "")[packageWrapper.Name]; ok {
 			logrus.Debugf("Migrating featured annotation to latest version %s\n", packageWrapper.Name)
 			featuredIndex := val[0].Annotations[annotationFeatured]
-			if err := packageWrapper.annotate(annotationFeatured, "", true, false); err != nil {
+			err := annotate(packageWrapper.ParsedVendor, packageWrapper.LatestStored.Name, annotationFeatured, "", true, false)
+			if err != nil {
 				return fmt.Errorf("failed to annotate package: %w", err)
 			}
-			packageWrapper.Annotations[annotationFeatured] = featuredIndex
+			if err = writeIndex(); err != nil {
+				return fmt.Errorf("failed to write index: %w", err)
+			}
+			annotations[annotationFeatured] = featuredIndex
 		}
 
 		if packageWrapper.UpstreamYaml.Namespace != "" {
-			packageWrapper.Annotations[annotationNamespace] = packageWrapper.UpstreamYaml.Namespace
+			annotations[annotationNamespace] = packageWrapper.UpstreamYaml.Namespace
 		}
 		if helmChart.Metadata.KubeVersion != "" && packageWrapper.UpstreamYaml.ChartYaml.KubeVersion != "" {
-			packageWrapper.Annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
+			annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
 			helmChart.Metadata.KubeVersion = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
 		} else if helmChart.Metadata.KubeVersion != "" {
-			packageWrapper.Annotations[annotationKubeVersion] = helmChart.Metadata.KubeVersion
+			annotations[annotationKubeVersion] = helmChart.Metadata.KubeVersion
 		} else if packageWrapper.UpstreamYaml.ChartYaml.KubeVersion != "" {
-			packageWrapper.Annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
+			annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
 		}
 
 		if packageVersion := packageWrapper.UpstreamYaml.PackageVersion; packageVersion != 0 {
@@ -718,9 +714,9 @@ func conformPackage(packageWrapper PackageWrapper) error {
 			}
 		}
 
-		conform.ApplyChartAnnotations(helmChart, packageWrapper.Annotations, false)
+		conform.ApplyChartAnnotations(helmChart, annotations, false)
 
-		if packageWrapper.Save {
+		if writeChart {
 			err = cleanPackage(packageWrapper.Path)
 			if err != nil {
 				logrus.Debug(err)
@@ -752,23 +748,14 @@ func conformPackage(packageWrapper PackageWrapper) error {
 	return err
 }
 
-// getAssetFilename gets the filename for a helm chart as used
-// in an assets/<vendor> directory.
-func getAssetFilename(name, version string) string {
-	return fmt.Sprintf("%s-%s.tgz", name, version)
-}
-
 // Saves chart to disk as asset gzip and directory
 func saveChart(helmChart *chart.Chart, assetsPath, chartsPath string) error {
 
 	logrus.Debugf("Exporting chart assets to %s\n", assetsPath)
-	err := conform.ExportChartAsset(helmChart, assetsPath)
+	assetFile, err := chartutil.Save(helmChart, assetsPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to save chart %q version %q: %w", helmChart.Name(), helmChart.Metadata.Version, err)
 	}
-
-	assetFile := getAssetFilename(helmChart.Name(), helmChart.Metadata.Version)
-	assetFile = path.Join(assetsPath, assetFile)
 
 	err = conform.Gunzip(assetFile, chartsPath)
 	if err != nil {
@@ -826,15 +813,18 @@ func getLatestStoredVersion(chartName string) (repo.ChartVersion, error) {
 	return latestVersion, nil
 }
 
+// getByAnnotation gets all repo.ChartVersions from index.yaml that have
+// the specified annotation with the specified value. If value is "",
+// all repo.ChartVersions that have the specified annotation will be
+// returned, regardless of that annotation's value.
 func getByAnnotation(annotation, value string) map[string]repo.ChartVersions {
 	indexYaml, err := readIndex()
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("failed to read index.yaml: %s", err)
 	}
 	matchedVersions := make(map[string]repo.ChartVersions)
 
-	for chartName := range indexYaml.Entries {
-		entries := indexYaml.Entries[chartName]
+	for chartName, entries := range indexYaml.Entries {
 		for _, version := range entries {
 			appendVersion := false
 			if _, ok := version.Annotations[annotation]; ok {
@@ -931,32 +921,6 @@ func writeIndex() error {
 	return nil
 }
 
-// Fetches metadata from upstream repositories.
-// Return list of skipped packages
-func fetchUpstreams(packageList PackageList) []string {
-	skippedList := make([]string, 0)
-	for _, packageWrapper := range packageList {
-		err := conformPackage(packageWrapper)
-		if err != nil {
-			logrus.Error(err)
-			skippedList = append(skippedList, packageWrapper.Name)
-			continue
-		}
-	}
-
-	return skippedList
-}
-
-// Reads in upstream yaml file
-func parseUpstream(packagePath string) (*parse.UpstreamYaml, error) {
-	upstreamYaml, err := parse.ParseUpstreamYaml(packagePath)
-	if err != nil {
-		return nil, err
-	}
-
-	return &upstreamYaml, nil
-}
-
 // Generates list of package paths with upstream yaml available
 func generatePackageList(currentPackage string) PackageList {
 	packageDirectory := filepath.Join(getRepoRoot(), repositoryPackagesDir)
@@ -989,12 +953,8 @@ func generatePackageList(currentPackage string) PackageList {
 func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, print bool) (PackageList, error) {
 	packageList := make(PackageList, 0)
 	for _, packageWrapper := range generatePackageList(currentPackage) {
-		packageWrapper.Annotations = make(map[string]string)
 		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
-		if onlyLatest {
-			packageWrapper.OnlyLatest = true
-		}
-		updated, err := packageWrapper.populate()
+		updated, err := packageWrapper.populate(onlyLatest)
 		if err != nil {
 			logrus.Error(err)
 			continue
@@ -1142,10 +1102,6 @@ func generateChanges(auto bool, stage bool) {
 	var err error
 	if auto || stage {
 		packageList, err = populatePackages(currentPackage, true, false, true)
-		for i := range packageList {
-			packageList[i].GenPatch = true
-			packageList[i].Save = true
-		}
 	} else {
 		packageList, err = populatePackages(currentPackage, false, true, true)
 	}
@@ -1153,25 +1109,34 @@ func generateChanges(auto bool, stage bool) {
 		logrus.Fatal(err)
 	}
 
-	if len(packageList) > 0 {
-		skippedList := fetchUpstreams(packageList)
-		if len(skippedList) > 0 {
-			logrus.Errorf("Skipped due to error: %v", skippedList)
+	if len(packageList) == 0 {
+		return
+	}
+
+	skippedList := make([]string, 0)
+	for _, packageWrapper := range packageList {
+		if err := conformPackage(packageWrapper, auto || stage); err != nil {
+			logrus.Error(err)
+			skippedList = append(skippedList, packageWrapper.Name)
 		}
-		if len(skippedList) >= len(packageList) {
-			logrus.Fatalf("All packages skipped. Exiting...")
+	}
+	if len(skippedList) > 0 {
+		logrus.Errorf("Skipped due to error: %v", skippedList)
+	}
+	if len(skippedList) >= len(packageList) {
+		logrus.Fatalf("All packages skipped. Exiting...")
+	}
+
+	if auto || stage {
+		err = writeIndex()
+		if err != nil {
+			logrus.Error(err)
 		}
-		if auto || stage {
-			err = writeIndex()
-			if err != nil {
-				logrus.Error(err)
-			}
-		}
-		if auto {
-			err = commitChanges(packageList, false)
-			if err != nil {
-				logrus.Fatal(err)
-			}
+	}
+	if auto {
+		err = commitChanges(packageList, false)
+		if err != nil {
+			logrus.Fatal(err)
 		}
 	}
 }
@@ -1227,9 +1192,14 @@ func addFeaturedChart(c *cli.Context) {
 			logrus.Errorf("%s already featured at index %d\n", chartName, featuredNumber)
 		}
 	} else {
-		err = packageList[0].annotate(annotationFeatured, c.Args().Get(1), false, true)
+		vendor := packageList[0].ParsedVendor
+		chartName := packageList[0].LatestStored.Name
+		err = annotate(vendor, chartName, annotationFeatured, c.Args().Get(1), false, true)
 		if err != nil {
 			logrus.Fatal(err)
+		}
+		if err = writeIndex(); err != nil {
+			logrus.Fatalf("failed to write index: %s", err)
 		}
 	}
 }
@@ -1253,9 +1223,14 @@ func removeFeaturedChart(c *cli.Context) {
 		logrus.Fatal(err)
 	}
 
-	err = packageList[0].annotate(annotationFeatured, "", true, false)
+	vendor := packageList[0].ParsedVendor
+	chartName := packageList[0].LatestStored.Name
+	err = annotate(vendor, chartName, annotationFeatured, "", true, false)
 	if err != nil {
 		logrus.Fatal(err)
+	}
+	if err = writeIndex(); err != nil {
+		logrus.Fatalf("failed to write index: %s", err)
 	}
 }
 
@@ -1301,9 +1276,14 @@ func hideChart(c *cli.Context) {
 		}
 
 		if len(packageList) == 1 {
-			err = packageList[0].annotate(annotationHidden, "true", false, false)
+			vendor := packageList[0].ParsedVendor
+			chartName := packageList[0].LatestStored.Name
+			err = annotate(vendor, chartName, annotationHidden, "true", false, false)
 			if err != nil {
 				logrus.Error(err)
+			}
+			if err = writeIndex(); err != nil {
+				logrus.Fatalf("failed to write index: %s", err)
 			}
 		}
 	}
