@@ -7,6 +7,7 @@ require (
 	github.com/go-git/go-git/v5 v5.7.0
 	github.com/google/go-github/v53 v53.2.0
 	github.com/sirupsen/logrus v1.9.3
+	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli v1.22.14
 	helm.sh/helm/v3 v3.12.1
 	sigs.k8s.io/yaml v1.3.0
@@ -80,6 +81,7 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pjbgf/sha1cd v0.3.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.14.0 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
