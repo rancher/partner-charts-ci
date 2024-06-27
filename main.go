@@ -842,7 +842,7 @@ func addAnnotations(packageWrapper PackageWrapper, helmChart *chart.Chart) error
 	}
 
 	if packageVersion := packageWrapper.UpstreamYaml.PackageVersion; packageVersion != 0 {
-		generatedVersion, err := conform.GeneratePackageVersion(helmChart.Metadata.Version, &packageVersion, "")
+		generatedVersion, err := conform.GeneratePackageVersion(helmChart.Metadata.Version, &packageVersion)
 		helmChart.Metadata.Version = generatedVersion
 		if err != nil {
 			return fmt.Errorf("failed to generate version: %w", err)
@@ -975,7 +975,7 @@ func conformPackage(packageWrapper PackageWrapper) error {
 		}
 
 		if packageVersion := packageWrapper.UpstreamYaml.PackageVersion; packageVersion != 0 {
-			helmChart.Metadata.Version, err = conform.GeneratePackageVersion(helmChart.Metadata.Version, &packageVersion, "")
+			helmChart.Metadata.Version, err = conform.GeneratePackageVersion(helmChart.Metadata.Version, &packageVersion)
 			if err != nil {
 				logrus.Error(err)
 			}
