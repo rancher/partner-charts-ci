@@ -650,7 +650,7 @@ func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetad
 	return helmChart, nil
 }
 
-func ApplyUpdates(packageWrapper PackageWrapper, writeChart bool) error {
+func ApplyUpdates(packageWrapper PackageWrapper) error {
 	logrus.Debugf("Conforming package from %s\n", packageWrapper.Path)
 
 	existingCharts, err := loadExistingCharts(packageWrapper.ParsedVendor, packageWrapper.Name)
@@ -677,10 +677,6 @@ func ApplyUpdates(packageWrapper PackageWrapper, writeChart bool) error {
 
 	if err := integrateCharts(packageWrapper, existingCharts, newCharts); err != nil {
 		return fmt.Errorf("failed to reconcile charts for package %q: %w", packageWrapper.Name, err)
-	}
-
-	if !writeChart {
-		return nil
 	}
 
 	allCharts := make([]*chart.Chart, 0, len(existingCharts)+len(newCharts))
