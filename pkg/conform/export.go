@@ -11,7 +11,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 )
 
@@ -63,22 +62,16 @@ func ApplyOverlayFiles(packagePath string) error {
 		}
 		for _, dir := range dirList {
 			generatedPath := filepath.Join(packagePath, "charts", dir)
-			if _, err := os.Stat(generatedPath); os.IsNotExist(err) {
-				if err := os.MkdirAll(generatedPath, 0755); err != nil {
-					return fmt.Errorf("failed to mkdir %q: %w", generatedPath, err)
-				}
+			if err := os.MkdirAll(generatedPath, 0755); err != nil {
+				return fmt.Errorf("failed to mkdir %q: %w", generatedPath, err)
 			}
 		}
 
 		for _, filePath := range fileList {
 			srcPath := filepath.Join(overlayPath, filePath)
-			if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-				return err
-			}
-
 			srcFile, err := os.Open(srcPath)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to open %q: %w", srcPath, err)
 			}
 			defer srcFile.Close()
 
@@ -119,10 +112,8 @@ func LinkOverlayFiles(packagePath string) error {
 		}
 		for _, dir := range dirList {
 			generatedPath := filepath.Join(packagePath, generatedDir, overlayDir, dir)
-			if _, err := os.Stat(generatedPath); os.IsNotExist(err) {
-				if err := os.MkdirAll(generatedPath, 0755); err != nil {
-					return fmt.Errorf("failed to mkdir %q: %w", generatedPath, err)
-				}
+			if err := os.MkdirAll(generatedPath, 0755); err != nil {
+				return fmt.Errorf("failed to mkdir %q: %w", generatedPath, err)
 			}
 		}
 
@@ -130,11 +121,8 @@ func LinkOverlayFiles(packagePath string) error {
 			depth := len(strings.Split(file, "/")) + 1
 			pathPrefix := strings.Repeat("../", depth)
 			generatedPath := filepath.Join(packagePath, generatedDir, overlayDir, file)
-			if _, err := os.Stat(generatedPath); !os.IsNotExist(err) {
-				err = os.Remove(generatedPath)
-				if err != nil {
-					logrus.Error(err)
-				}
+			if err := os.RemoveAll(generatedPath); err != nil {
+				logrus.Errorf("failed to remove %q: %s", generatedPath, err)
 			}
 			symLinkPath := filepath.Join(pathPrefix, overlayDir, file)
 			err = os.Symlink(symLinkPath, generatedPath)
@@ -157,36 +145,13 @@ func RemoveOverlayFiles(packagePath string) error {
 		}
 		for _, file := range fileList {
 			generatedPath := filepath.Join(packagePath, generatedDir, overlayDir, file)
-			if _, err := os.Stat(generatedPath); !os.IsNotExist(err) {
-				err = os.Remove(generatedPath)
-				if err != nil {
-					logrus.Error(err)
-				}
+			if err := os.RemoveAll(generatedPath); err != nil {
+				logrus.Errorf("failed to remove %q: %s", generatedPath, err)
 			}
 		}
 	}
 
 	return nil
-}
-
-// Load and Unloads Chart to ensure consistent layout for overlay
-func StandardizeChartDirectory(sourcePath string, targetPath string) error {
-	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
-		return fmt.Errorf("%s does not exist", sourcePath)
-	}
-
-	helmChart, err := loader.Load(sourcePath)
-	if err != nil {
-		logrus.Debug(err)
-	}
-
-	if targetPath == "" {
-		targetPath = sourcePath
-		os.RemoveAll(sourcePath)
-	}
-
-	return ExportChartDirectory(helmChart, targetPath)
-
 }
 
 func ExportChartDirectory(chart *chart.Chart, targetPath string) error {
@@ -199,35 +164,27 @@ func ExportChartDirectory(chart *chart.Chart, targetPath string) error {
 	if err != nil {
 		return err
 	}
+	defer os.RemoveAll(tempDir)
 
-	tgz, err := chartutil.Save(chart, tempDir)
+	tgzPath, err := chartutil.Save(chart, tempDir)
 	if err != nil {
-		err = fmt.Errorf("Unable to save chart archive to %s", tempDir)
-		return err
+		return fmt.Errorf("failed to save chart archive to %s", tempDir)
 	}
 
 	chartOutputPath := filepath.Join(tempDir, chart.Name())
-
-	if err = Gunzip(tgz, chartOutputPath); err != nil {
-		return err
+	if err := Gunzip(tgzPath, chartOutputPath); err != nil {
+		return fmt.Errorf("failed to unzip %q to %q: %w", tgzPath, chartOutputPath, err)
 	}
 
-	if _, err := os.Stat(targetPath); !os.IsNotExist(err) {
-		os.RemoveAll(targetPath)
+	if err := os.RemoveAll(targetPath); err != nil {
+		return fmt.Errorf("failed to remove targetPath %q: %w", targetPath, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		return fmt.Errorf("failed to create targetPath %q: %w", targetPath, err)
 	}
 
-	if err = os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-		return err
-	}
-
-	err = os.Rename(chartOutputPath, targetPath)
-	if err != nil {
-		return err
-	}
-
-	err = os.RemoveAll(tempDir)
-	if err != nil {
-		return err
+	if err = os.Rename(chartOutputPath, targetPath); err != nil {
+		return fmt.Errorf("failed to move %q to %q: %w", chartOutputPath, targetPath, err)
 	}
 
 	return nil
@@ -260,13 +217,9 @@ func Gunzip(path string, outPath string) error {
 		return fmt.Errorf("Expecting file of type .gz or .tgz")
 	}
 
-	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("%s does not exist or is inaccessible", path)
-	}
-
 	gzipFile, err := os.Open(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open %q: %w", path, err)
 	}
 	defer gzipFile.Close()
 
@@ -289,10 +242,8 @@ func Gunzip(path string, outPath string) error {
 
 		filePath := filepath.Join(outPath, stripRootPath(h.Name))
 		parentPath := filepath.Dir(filePath)
-		if _, err := os.Stat(parentPath); os.IsNotExist(err) {
-			if err = os.MkdirAll(parentPath, 0755); err != nil {
-				return err
-			}
+		if err := os.MkdirAll(parentPath, 0755); err != nil {
+			return fmt.Errorf("failed to mkdir %q: %w", parentPath, err)
 		}
 
 		if h.Typeflag == tar.TypeDir {

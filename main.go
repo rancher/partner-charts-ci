@@ -385,35 +385,6 @@ func cleanPackage(packagePath string) error {
 	return nil
 }
 
-// Prepares package for modification via patch and overlay
-func preparePackage(packagePath string, sourceMetadata *fetcher.ChartSourceMetadata, chartVersion *repo.ChartVersion) error {
-	var chart *chart.Chart
-	var err error
-	logrus.Debugf("Preparing package from %s", packagePath)
-
-	if sourceMetadata.Source == "Git" {
-		chart, err = fetcher.LoadChartFromGit(chartVersion.URLs[0], sourceMetadata.SubDirectory, sourceMetadata.Commit)
-	} else {
-		chart, err = fetcher.LoadChartFromUrl(chartVersion.URLs[0])
-	}
-	if err != nil {
-		return err
-	}
-
-	exportPath := path.Join(packagePath, repositoryChartsDir)
-	err = conform.ExportChartDirectory(chart, exportPath)
-	if err != nil {
-		logrus.Error(err)
-	}
-
-	patchOrigPath := path.Join(packagePath, repositoryChartsDir, "Chart.yaml.orig")
-	if _, err := os.Stat(patchOrigPath); !os.IsNotExist(err) {
-		os.Remove(patchOrigPath)
-	}
-
-	return nil
-}
-
 func collectTrackedVersions(upstreamVersions repo.ChartVersions, tracked []string) map[string]repo.ChartVersions {
 	trackedVersions := make(map[string]repo.ChartVersions)
 
@@ -612,14 +583,23 @@ func parseVendor(upstreamYamlVendor, chartName, packagePath string) (string, str
 
 // Prepares and standardizes chart, then returns loaded chart object
 func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetadata, chartVersion repo.ChartVersion) (*chart.Chart, error) {
+	logrus.Debugf("Preparing package from %s", packagePath)
+	chartDirectoryPath := path.Join(packagePath, repositoryChartsDir)
+
+	var chartWithoutOverlayFiles *chart.Chart
 	var err error
-	if err := preparePackage(packagePath, &sourceMetadata, &chartVersion); err != nil {
+	if sourceMetadata.Source == "Git" {
+		chartWithoutOverlayFiles, err = fetcher.LoadChartFromGit(chartVersion.URLs[0], sourceMetadata.SubDirectory, sourceMetadata.Commit)
+	} else {
+		chartWithoutOverlayFiles, err = fetcher.LoadChartFromUrl(chartVersion.URLs[0])
+	}
+	if err != nil {
 		return nil, err
 	}
 
-	chartDirectoryPath := path.Join(packagePath, repositoryChartsDir)
-	if err := conform.StandardizeChartDirectory(chartDirectoryPath, ""); err != nil {
-		return nil, fmt.Errorf("failed to standardize chart directory: %w", err)
+	err = conform.ExportChartDirectory(chartWithoutOverlayFiles, chartDirectoryPath)
+	if err != nil {
+		logrus.Error(err)
 	}
 
 	err = conform.ApplyOverlayFiles(packagePath)
@@ -639,7 +619,7 @@ func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetad
 
 // Mutates chart with necessary alterations for repository. Only writes
 // the chart to disk if writeChart is true.
-func conformPackage(packageWrapper PackageWrapper, writeChart bool) error {
+func conformPackage(packageWrapper PackageWrapper) error {
 	var err error
 	logrus.Debugf("Conforming package from %s\n", packageWrapper.Path)
 	for _, chartVersion := range packageWrapper.FetchVersions {
@@ -716,31 +696,26 @@ func conformPackage(packageWrapper PackageWrapper, writeChart bool) error {
 
 		conform.ApplyChartAnnotations(helmChart, annotations, false)
 
-		if writeChart {
-			err = cleanPackage(packageWrapper.Path)
-			if err != nil {
-				logrus.Debug(err)
-			}
-
-			assetsPath := filepath.Join(
-				getRepoRoot(),
-				repositoryAssetsDir,
-				packageWrapper.ParsedVendor)
-
-			chartsPath := filepath.Join(
-				getRepoRoot(),
-				repositoryChartsDir,
-				packageWrapper.ParsedVendor,
-				helmChart.Metadata.Name)
-
-			if _, err := os.Stat(chartsPath); !os.IsNotExist(err) {
-				os.RemoveAll(chartsPath)
-			}
-
-			err = saveChart(helmChart, assetsPath, chartsPath)
-			if err != nil {
-				return err
-			}
+		// write chart
+		err = cleanPackage(packageWrapper.Path)
+		if err != nil {
+			logrus.Debug(err)
+		}
+		assetsPath := filepath.Join(
+			getRepoRoot(),
+			repositoryAssetsDir,
+			packageWrapper.ParsedVendor)
+		chartsPath := filepath.Join(
+			getRepoRoot(),
+			repositoryChartsDir,
+			packageWrapper.ParsedVendor,
+			helmChart.Metadata.Name)
+		if err := os.RemoveAll(chartsPath); err != nil {
+			return fmt.Errorf("failed to remove chartsPath %q: %w", chartsPath, err)
+		}
+		err = saveChart(helmChart, assetsPath, chartsPath)
+		if err != nil {
+			return err
 		}
 
 	}
@@ -1064,13 +1039,9 @@ func parsePackageListToPackageIconList(packageList PackageList) icons.PackageIco
 // overwriteIndexIconsAndTestChanges will overwrite the index.yaml icon fields with the new downloaded icons path
 func overwriteIndexIconsAndTestChanges(packageIconList icons.PackageIconList) error {
 	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
-	if _, err := os.Stat(indexFilePath); os.IsNotExist(err) {
-		return err
-	}
-
 	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load index file: %w", err)
 	}
 	assetsDirectoryPath := filepath.Join(getRepoRoot(), repositoryAssetsDir)
 	newHelmIndexYaml, err := repo.IndexDirectory(assetsDirectoryPath, repositoryAssetsDir)
@@ -1096,15 +1067,10 @@ func overwriteIndexIconsAndTestChanges(packageIconList icons.PackageIconList) er
 // if auto or stage is true, it will write the index.yaml file if the chart has new updates
 // the charts to be modified depends on the populatePackages function and their update status
 // the changes will be applied on fetchUpstreams function
-func generateChanges(auto bool, stage bool) {
+func generateChanges(auto bool) {
 	currentPackage := os.Getenv(packageEnvVariable)
 	var packageList PackageList
-	var err error
-	if auto || stage {
-		packageList, err = populatePackages(currentPackage, true, false, true)
-	} else {
-		packageList, err = populatePackages(currentPackage, false, true, true)
-	}
+	packageList, err := populatePackages(currentPackage, true, false, true)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -1115,7 +1081,7 @@ func generateChanges(auto bool, stage bool) {
 
 	skippedList := make([]string, 0)
 	for _, packageWrapper := range packageList {
-		if err := conformPackage(packageWrapper, auto || stage); err != nil {
+		if err := conformPackage(packageWrapper); err != nil {
 			logrus.Error(err)
 			skippedList = append(skippedList, packageWrapper.Name)
 		}
@@ -1127,12 +1093,10 @@ func generateChanges(auto bool, stage bool) {
 		logrus.Fatalf("All packages skipped. Exiting...")
 	}
 
-	if auto || stage {
-		err = writeIndex()
-		if err != nil {
-			logrus.Error(err)
-		}
+	if err := writeIndex(); err != nil {
+		logrus.Error(err)
 	}
+
 	if auto {
 		err = commitChanges(packageList, false)
 		if err != nil {
@@ -1300,16 +1264,11 @@ func cleanCharts(c *cli.Context) {
 	}
 }
 
-// CLI function call - Prepares package(s) for modification via patch
-func prepareCharts(c *cli.Context) {
-	generateChanges(false, false)
-}
-
 // CLI function call - Generates all changes for available packages,
 // Checking against upstream version, prepare, patch, clean, and index update
 // Does not commit
 func stageChanges(c *cli.Context) {
-	generateChanges(false, true)
+	generateChanges(false)
 }
 
 func unstageChanges(c *cli.Context) {
@@ -1322,7 +1281,7 @@ func unstageChanges(c *cli.Context) {
 // CLI function call - Generates automated commit
 func autoUpdate(c *cli.Context) {
 	icons := c.Bool("icons")
-	generateChanges(true, false)
+	generateChanges(true)
 	if icons {
 		overrideIcons()
 	}
@@ -1341,12 +1300,9 @@ func validateRepo(c *cli.Context) {
 	directoryComparison := validate.DirectoryComparison{}
 
 	configYamlPath := path.Join(getRepoRoot(), configOptionsFile)
-	if _, err := os.Stat(configYamlPath); os.IsNotExist(err) {
-		logrus.Fatalf("Unable to read %s\n", configOptionsFile)
-	}
 	configYaml, err := validate.ReadConfig(configYamlPath)
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("failed to read %s: %s\n", configOptionsFile, err)
 	}
 
 	if len(configYaml.Validate) == 0 || configYaml.Validate[0].Branch == "" || configYaml.Validate[0].Url == "" {
@@ -1501,16 +1457,6 @@ func main() {
 			Name:   "list",
 			Usage:  "Print a list of all tracked upstreams in current repository",
 			Action: listPackages,
-		},
-		{
-			Name:   "prepare",
-			Usage:  "Pull chart from upstream and prepare for alteration via patch",
-			Action: prepareCharts,
-			Hidden: true, // Hidden because this subcommand does not execute overrideIcons
-			// that is necessary in the current release process,
-			// this should not be executed and pushed to production
-			// otherwise we will not have the icons updated at index.yaml.
-			// You should use the auto command instead.
 		},
 		{
 			Name:   "clean",

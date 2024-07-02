@@ -58,7 +58,7 @@ func OverlayChartMetadata(helmChart *chart.Chart, overlay chart.Metadata) {
 	}
 	if overlay.Annotations != nil {
 		for annotation, value := range overlay.Annotations {
-			annotateChart(helmChart, annotation, value, true)
+			AnnotateChart(helmChart, annotation, value, true)
 		}
 	}
 	/* Leaving in place, commented, to match upstream Helm metadata
@@ -76,39 +76,41 @@ func OverlayChartMetadata(helmChart *chart.Chart, overlay chart.Metadata) {
 
 }
 
-func annotateChart(helmChart *chart.Chart, annotation, value string, override bool) bool {
-	modified := false
+func AnnotateChart(helmChart *chart.Chart, annotation, value string, override bool) bool {
 	if helmChart.Metadata.Annotations == nil {
 		helmChart.Metadata.Annotations = make(map[string]string)
 	}
-	if _, ok := helmChart.Metadata.Annotations[annotation]; !ok || override {
+	currentValue, ok := helmChart.Metadata.Annotations[annotation]
+	if !ok || (ok && currentValue != value && override) {
 		logrus.Debugf("Adding annotation '%s: %s' to %s (%s)\n", annotation, value, helmChart.Name(), helmChart.Metadata.Version)
 		helmChart.Metadata.Annotations[annotation] = value
-		modified = true
+		return true
 	}
-
-	return modified
+	return false
 }
 
-func deannotateChart(helmChart *chart.Chart, annotation, value string) bool {
+func DeannotateChart(helmChart *chart.Chart, annotation, value string) bool {
 	modified := false
 	removeAnnotation := false
-	if helmChart.Metadata.Annotations != nil {
-		if _, ok := helmChart.Metadata.Annotations[annotation]; ok {
-			if value != "" {
-				if helmChart.Metadata.Annotations[annotation] == value {
-					logrus.Debugf("Removing annotation '%s: %s' from %s (%s)\n", annotation, value, helmChart.Name(), helmChart.Metadata.Version)
-					removeAnnotation = true
-				}
-			} else {
-				logrus.Debugf("Removing annotation '%s' from %s (%s)\n", annotation, helmChart.Name(), helmChart.Metadata.Version)
+
+	if helmChart.Metadata.Annotations == nil {
+		return modified
+	}
+
+	if _, ok := helmChart.Metadata.Annotations[annotation]; ok {
+		if value != "" {
+			if helmChart.Metadata.Annotations[annotation] == value {
+				logrus.Debugf("Removing annotation '%s: %s' from %s (%s)\n", annotation, value, helmChart.Name(), helmChart.Metadata.Version)
 				removeAnnotation = true
 			}
+		} else {
+			logrus.Debugf("Removing annotation '%s' from %s (%s)\n", annotation, helmChart.Name(), helmChart.Metadata.Version)
+			removeAnnotation = true
 		}
-		if removeAnnotation {
-			delete(helmChart.Metadata.Annotations, annotation)
-			modified = true
-		}
+	}
+	if removeAnnotation {
+		delete(helmChart.Metadata.Annotations, annotation)
+		modified = true
 	}
 
 	return modified
@@ -121,7 +123,7 @@ func ApplyChartAnnotations(helmChart *chart.Chart, annotations map[string]string
 	}
 
 	for annotation, value := range annotations {
-		if annotateChart(helmChart, annotation, value, override) {
+		if AnnotateChart(helmChart, annotation, value, override) {
 			modified = true
 		}
 	}
@@ -133,7 +135,7 @@ func ApplyChartAnnotations(helmChart *chart.Chart, annotations map[string]string
 func RemoveChartAnnotations(helmChart *chart.Chart, annotations map[string]string) bool {
 	modified := false
 	for annotation, value := range annotations {
-		if deannotateChart(helmChart, annotation, value) {
+		if DeannotateChart(helmChart, annotation, value) {
 			modified = true
 		}
 	}
