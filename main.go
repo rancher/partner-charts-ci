@@ -614,42 +614,6 @@ func parseVendor(upstreamYamlVendor, chartName, packagePath string) (string, str
 	return vendor, parsedVendor
 }
 
-// Prepares and standardizes chart, then returns loaded chart object
-func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetadata, chartVersion repo.ChartVersion) (*chart.Chart, error) {
-	logrus.Debugf("Preparing package from %s", packagePath)
-	chartDirectoryPath := path.Join(packagePath, repositoryChartsDir)
-
-	var chartWithoutOverlayFiles *chart.Chart
-	var err error
-	if sourceMetadata.Source == "Git" {
-		chartWithoutOverlayFiles, err = fetcher.LoadChartFromGit(chartVersion.URLs[0], sourceMetadata.SubDirectory, sourceMetadata.Commit)
-	} else {
-		chartWithoutOverlayFiles, err = fetcher.LoadChartFromUrl(chartVersion.URLs[0])
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	err = conform.ExportChartDirectory(chartWithoutOverlayFiles, chartDirectoryPath)
-	if err != nil {
-		logrus.Error(err)
-	}
-
-	err = conform.ApplyOverlayFiles(packagePath)
-	if err != nil {
-		return nil, err
-	}
-
-	helmChart, err := loader.Load(chartDirectoryPath)
-	if err != nil {
-		return nil, err
-	}
-
-	helmChart.Metadata.Version = chartVersion.Version
-
-	return helmChart, nil
-}
-
 func ApplyUpdates(packageWrapper PackageWrapper) error {
 	logrus.Debugf("Conforming package from %s\n", packageWrapper.Path)
 
@@ -918,139 +882,6 @@ func ensureFeaturedAnnotation(existingCharts, newCharts []*chart.Chart) ([]*char
 	return modifiedCharts, nil
 }
 
-// Mutates chart with necessary alterations for repository. Only writes
-// the chart to disk if writeChart is true.
-func conformPackage(packageWrapper PackageWrapper) error {
-	var err error
-	logrus.Debugf("Conforming package from %s\n", packageWrapper.Path)
-	for _, chartVersion := range packageWrapper.FetchVersions {
-		logrus.Debugf("Conforming package %s (%s)\n", chartVersion.Name, chartVersion.Version)
-		helmChart, err := initializeChart(
-			packageWrapper.Path,
-			*packageWrapper.SourceMetadata,
-			*chartVersion,
-		)
-		if err != nil {
-			return err
-		}
-		annotations := make(map[string]string)
-
-		if autoInstall := packageWrapper.UpstreamYaml.AutoInstall; autoInstall != "" {
-			annotations[annotationAutoInstall] = autoInstall
-		}
-
-		if packageWrapper.UpstreamYaml.Experimental {
-			annotations[annotationExperimental] = "true"
-		}
-
-		if packageWrapper.UpstreamYaml.Hidden {
-			annotations[annotationHidden] = "true"
-		}
-
-		if !packageWrapper.UpstreamYaml.RemoteDependencies {
-			for _, d := range helmChart.Metadata.Dependencies {
-				d.Repository = fmt.Sprintf("file://./charts/%s", d.Name)
-			}
-		}
-
-		annotations[annotationCertified] = "partner"
-		annotations[annotationDisplayName] = packageWrapper.DisplayName
-		if packageWrapper.UpstreamYaml.ReleaseName != "" {
-			annotations[annotationReleaseName] = packageWrapper.UpstreamYaml.ReleaseName
-		} else {
-			annotations[annotationReleaseName] = packageWrapper.Name
-		}
-
-		conform.OverlayChartMetadata(helmChart, packageWrapper.UpstreamYaml.ChartYaml)
-
-		if val, ok := getByAnnotation(annotationFeatured, "")[packageWrapper.Name]; ok {
-			logrus.Debugf("Migrating featured annotation to latest version %s\n", packageWrapper.Name)
-			featuredIndex := val[0].Annotations[annotationFeatured]
-			err := annotate(packageWrapper.ParsedVendor, packageWrapper.LatestStored.Name, annotationFeatured, "", true, false)
-			if err != nil {
-				return fmt.Errorf("failed to annotate package: %w", err)
-			}
-			if err = writeIndex(); err != nil {
-				return fmt.Errorf("failed to write index: %w", err)
-			}
-			annotations[annotationFeatured] = featuredIndex
-		}
-
-		if packageWrapper.UpstreamYaml.Namespace != "" {
-			annotations[annotationNamespace] = packageWrapper.UpstreamYaml.Namespace
-		}
-		if helmChart.Metadata.KubeVersion != "" && packageWrapper.UpstreamYaml.ChartYaml.KubeVersion != "" {
-			annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
-			helmChart.Metadata.KubeVersion = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
-		} else if helmChart.Metadata.KubeVersion != "" {
-			annotations[annotationKubeVersion] = helmChart.Metadata.KubeVersion
-		} else if packageWrapper.UpstreamYaml.ChartYaml.KubeVersion != "" {
-			annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
-		}
-
-		if packageVersion := packageWrapper.UpstreamYaml.PackageVersion; packageVersion != 0 {
-			helmChart.Metadata.Version, err = conform.GeneratePackageVersion(helmChart.Metadata.Version, &packageVersion)
-			if err != nil {
-				logrus.Error(err)
-			}
-		}
-
-		conform.ApplyChartAnnotations(helmChart, annotations, false)
-
-		// write chart
-		err = cleanPackage(packageWrapper.Path)
-		if err != nil {
-			logrus.Debug(err)
-		}
-		assetsPath := filepath.Join(
-			getRepoRoot(),
-			repositoryAssetsDir,
-			packageWrapper.ParsedVendor)
-		chartsPath := filepath.Join(
-			getRepoRoot(),
-			repositoryChartsDir,
-			packageWrapper.ParsedVendor,
-			helmChart.Metadata.Name)
-		if err := os.RemoveAll(chartsPath); err != nil {
-			return fmt.Errorf("failed to remove chartsPath %q: %w", chartsPath, err)
-		}
-		err = saveChart(helmChart, assetsPath, chartsPath)
-		if err != nil {
-			return err
-		}
-
-	}
-
-	return err
-}
-
-// Saves chart to disk as asset gzip and directory
-func saveChart(helmChart *chart.Chart, assetsPath, chartsPath string) error {
-
-	logrus.Debugf("Exporting chart assets to %s\n", assetsPath)
-	assetFile, err := chartutil.Save(helmChart, assetsPath)
-	if err != nil {
-		return fmt.Errorf("failed to save chart %q version %q: %w", helmChart.Name(), helmChart.Metadata.Version, err)
-	}
-
-	err = conform.Gunzip(assetFile, chartsPath)
-	if err != nil {
-		logrus.Error(err)
-	}
-
-	// TODO: calling conform.ExportChartDirectory appears to do the
-	// exact same thing as calling conform.Gunzip above: it places the
-	// chart files into a directory. This should be removed as soon as
-	// we can verify that there is not a reason for this.
-	logrus.Debugf("Exporting chart to %s\n", chartsPath)
-	err = conform.ExportChartDirectory(helmChart, chartsPath)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func getLatestTracked(tracked []string) *semver.Version {
 	var latestTracked *semver.Version
 	for _, version := range tracked {
@@ -1302,83 +1133,6 @@ func downloadIcons(c *cli.Context) {
 	logrus.Infof("Downloaded %d icons", len(downloadedIcons))
 }
 
-// overrideIcons will get the package list and override the icon field in the index.yaml file with the downloaded icons.
-// It will also test if the icons are correctly overridden and if the index.yaml file is correctly written.
-// If the test fails, it will return an error and the user should check the logs for more information.
-// It will only work if the downloadIcons function was previously executed at some point in time.
-// The function will not download the icons, it will only override the icon field in the index.yaml file.
-// Before overriding the icons, it will check if the necessary conditions are met at parsePackageListToPackageIconList() function, if not it will skip the package.
-func overrideIcons() {
-	currentPackage := os.Getenv(packageEnvVariable)
-	iconOverride := true
-	icons.CheckFilesStructure() // stop execution if file structure is not correct
-
-	// populate all possible packages
-	packageList, err := populatePackages(currentPackage, false, false, false)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	// parse only the packages that have the necessary conditions for icon override
-	packageIconList := parsePackageListToPackageIconList(packageList)
-
-	err = overwriteIndexIconsAndTestChanges(packageIconList)
-	if err != nil {
-		logrus.Errorf("Failed to overwrite index icons: %v", err)
-	}
-
-	err = commitChanges(packageList, iconOverride)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-}
-
-// parsePackageListToPackageIconList will parse the PackageList to PackageIconList
-// and check if the necessary override icon conditions are met
-func parsePackageListToPackageIconList(packageList PackageList) icons.PackageIconList {
-	var packageIconList icons.PackageIconList
-	for _, pkg := range packageList {
-
-		// check conditions for icon override and avoid panics
-		iconURL, err := icons.GetDownloadedIconPath(pkg.Name)
-		if err != nil {
-			logrus.Errorf("failed to get downloaded icon path: %s", err)
-			continue
-		}
-
-		pkgIcon := icons.ParsePackageToPackageIconOverride(pkg.Name, pkg.Path, iconURL)
-		packageIconList = append(packageIconList, pkgIcon)
-	}
-	return packageIconList
-}
-
-// overwriteIndexIconsAndTestChanges will overwrite the index.yaml icon fields with the new downloaded icons path
-func overwriteIndexIconsAndTestChanges(packageIconList icons.PackageIconList) error {
-	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
-	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to load index file: %w", err)
-	}
-	assetsDirectoryPath := filepath.Join(getRepoRoot(), repositoryAssetsDir)
-	newHelmIndexYaml, err := repo.IndexDirectory(assetsDirectoryPath, repositoryAssetsDir)
-	if err != nil {
-		return err
-	}
-	helmIndexYaml.Merge(newHelmIndexYaml)
-	helmIndexYaml.SortEntries()
-
-	icons.OverrideIconValues(helmIndexYaml, packageIconList)
-
-	err = helmIndexYaml.WriteFile(indexFilePath, 0644)
-	if err != nil {
-		return err
-	}
-
-	updatedHelmIndexFile, _ := repo.LoadIndexFile(indexFilePath)
-
-	return icons.ValidateIconsAndIndexYaml(packageIconList, updatedHelmIndexFile)
-}
-
 // generateChanges will generate the changes for the packages based on the flags provided
 // if auto or stage is true, it will write the index.yaml file if the chart has new updates
 // the charts to be modified depends on the populatePackages function and their update status
@@ -1397,7 +1151,7 @@ func generateChanges(auto bool) {
 
 	skippedList := make([]string, 0)
 	for _, packageWrapper := range packageList {
-		if err := conformPackage(packageWrapper); err != nil {
+		if err := ApplyUpdates(packageWrapper); err != nil {
 			logrus.Error(err)
 			skippedList = append(skippedList, packageWrapper.Name)
 		}
@@ -1596,11 +1350,7 @@ func unstageChanges(c *cli.Context) {
 
 // CLI function call - Generates automated commit
 func autoUpdate(c *cli.Context) {
-	icons := c.Bool("icons")
 	generateChanges(true)
-	if icons {
-		overrideIcons()
-	}
 }
 
 // CLI function call - Validates repo against released
@@ -1783,22 +1533,11 @@ func main() {
 			Name:   "auto",
 			Usage:  "Generate and commit changes",
 			Action: autoUpdate,
-			Flags: []cli.Flag{
-				&cli.BoolFlag{
-					Name:  "icons",
-					Usage: "override icons in index.yaml if true",
-				},
-			},
 		},
 		{
 			Name:   "stage",
 			Usage:  "Stage all changes. Does not commit",
 			Action: stageChanges,
-			Hidden: true, // Hidden because this subcommand does not execute overrideIcons
-			// that is necessary in the current release process,
-			// this should not be executed and pushed to production
-			// otherwise we will not have the icons updated at index.yaml.
-			// You should use the auto command instead.
 		},
 		{
 			Name:   "unstage",
