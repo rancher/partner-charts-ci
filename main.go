@@ -1072,15 +1072,10 @@ func overwriteIndexIconsAndTestChanges(packageIconList icons.PackageIconList) er
 // if auto or stage is true, it will write the index.yaml file if the chart has new updates
 // the charts to be modified depends on the populatePackages function and their update status
 // the changes will be applied on fetchUpstreams function
-func generateChanges(auto bool, stage bool) {
+func generateChanges(auto bool) {
 	currentPackage := os.Getenv(packageEnvVariable)
 	var packageList PackageList
-	var err error
-	if auto || stage {
-		packageList, err = populatePackages(currentPackage, true, false, true)
-	} else {
-		packageList, err = populatePackages(currentPackage, false, true, true)
-	}
+	packageList, err := populatePackages(currentPackage, true, false, true)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -1091,7 +1086,7 @@ func generateChanges(auto bool, stage bool) {
 
 	skippedList := make([]string, 0)
 	for _, packageWrapper := range packageList {
-		if err := conformPackage(packageWrapper, auto || stage); err != nil {
+		if err := conformPackage(packageWrapper, true); err != nil {
 			logrus.Error(err)
 			skippedList = append(skippedList, packageWrapper.Name)
 		}
@@ -1103,12 +1098,10 @@ func generateChanges(auto bool, stage bool) {
 		logrus.Fatalf("All packages skipped. Exiting...")
 	}
 
-	if auto || stage {
-		err = writeIndex()
-		if err != nil {
-			logrus.Error(err)
-		}
+	if err := writeIndex(); err != nil {
+		logrus.Error(err)
 	}
+
 	if auto {
 		err = commitChanges(packageList, false)
 		if err != nil {
@@ -1280,7 +1273,7 @@ func cleanCharts(c *cli.Context) {
 // Checking against upstream version, prepare, patch, clean, and index update
 // Does not commit
 func stageChanges(c *cli.Context) {
-	generateChanges(false, true)
+	generateChanges(false)
 }
 
 func unstageChanges(c *cli.Context) {
@@ -1293,7 +1286,7 @@ func unstageChanges(c *cli.Context) {
 // CLI function call - Generates automated commit
 func autoUpdate(c *cli.Context) {
 	icons := c.Bool("icons")
-	generateChanges(true, false)
+	generateChanges(true)
 	if icons {
 		overrideIcons()
 	}
