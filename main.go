@@ -619,7 +619,7 @@ func initializeChart(packagePath string, sourceMetadata fetcher.ChartSourceMetad
 
 // Mutates chart with necessary alterations for repository. Only writes
 // the chart to disk if writeChart is true.
-func conformPackage(packageWrapper PackageWrapper, writeChart bool) error {
+func conformPackage(packageWrapper PackageWrapper) error {
 	var err error
 	logrus.Debugf("Conforming package from %s\n", packageWrapper.Path)
 	for _, chartVersion := range packageWrapper.FetchVersions {
@@ -696,31 +696,26 @@ func conformPackage(packageWrapper PackageWrapper, writeChart bool) error {
 
 		conform.ApplyChartAnnotations(helmChart, annotations, false)
 
-		if writeChart {
-			err = cleanPackage(packageWrapper.Path)
-			if err != nil {
-				logrus.Debug(err)
-			}
-
-			assetsPath := filepath.Join(
-				getRepoRoot(),
-				repositoryAssetsDir,
-				packageWrapper.ParsedVendor)
-
-			chartsPath := filepath.Join(
-				getRepoRoot(),
-				repositoryChartsDir,
-				packageWrapper.ParsedVendor,
-				helmChart.Metadata.Name)
-
-			if err := os.RemoveAll(chartsPath); err != nil {
-				return fmt.Errorf("failed to remove chartsPath %q: %w", chartsPath, err)
-			}
-
-			err = saveChart(helmChart, assetsPath, chartsPath)
-			if err != nil {
-				return err
-			}
+		// write chart
+		err = cleanPackage(packageWrapper.Path)
+		if err != nil {
+			logrus.Debug(err)
+		}
+		assetsPath := filepath.Join(
+			getRepoRoot(),
+			repositoryAssetsDir,
+			packageWrapper.ParsedVendor)
+		chartsPath := filepath.Join(
+			getRepoRoot(),
+			repositoryChartsDir,
+			packageWrapper.ParsedVendor,
+			helmChart.Metadata.Name)
+		if err := os.RemoveAll(chartsPath); err != nil {
+			return fmt.Errorf("failed to remove chartsPath %q: %w", chartsPath, err)
+		}
+		err = saveChart(helmChart, assetsPath, chartsPath)
+		if err != nil {
+			return err
 		}
 
 	}
@@ -1086,7 +1081,7 @@ func generateChanges(auto bool) {
 
 	skippedList := make([]string, 0)
 	for _, packageWrapper := range packageList {
-		if err := conformPackage(packageWrapper, true); err != nil {
+		if err := conformPackage(packageWrapper); err != nil {
 			logrus.Error(err)
 			skippedList = append(skippedList, packageWrapper.Name)
 		}
