@@ -1276,11 +1276,6 @@ func cleanCharts(c *cli.Context) {
 	}
 }
 
-// CLI function call - Prepares package(s) for modification via patch
-func prepareCharts(c *cli.Context) {
-	generateChanges(false, false)
-}
-
 // CLI function call - Generates all changes for available packages,
 // Checking against upstream version, prepare, patch, clean, and index update
 // Does not commit
@@ -1474,16 +1469,6 @@ func main() {
 			Name:   "list",
 			Usage:  "Print a list of all tracked upstreams in current repository",
 			Action: listPackages,
-		},
-		{
-			Name:   "prepare",
-			Usage:  "Pull chart from upstream and prepare for alteration via patch",
-			Action: prepareCharts,
-			Hidden: true, // Hidden because this subcommand does not execute overrideIcons
-			// that is necessary in the current release process,
-			// this should not be executed and pushed to production
-			// otherwise we will not have the icons updated at index.yaml.
-			// You should use the auto command instead.
 		},
 		{
 			Name:   "clean",
