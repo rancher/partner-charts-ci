@@ -72,25 +72,32 @@ func NewChartWrapper(helmChart *chart.Chart) *ChartWrapper {
 	}
 }
 
-// PackageWrapper is a representation of relevant package metadata
+// PackageWrapper is the manifestation of the concept of a package,
+// which is configuration that refers to an upstream helm chart plus
+// any local modifications that may be made to those helm charts as
+// they are being integrated into the partner charts repository.
+//
+// PackageWrapper is not called Package because the most obvious name
+// for instances of it would be "package", which conflicts with the
+// "package" golang keyword.
 type PackageWrapper struct {
-	//Chart Display Name
-	DisplayName string
-	//Filtered subset of versions to-be-fetched
-	FetchVersions repo.ChartVersions
-	//Path stores the package path in current repository
-	Path string
-	//LatestStored stores the latest version of the chart currently in the repo
-	LatestStored repo.ChartVersion
-	//Chart name
+	// The developer-facing name of the chart
 	Name string
-	//SourceMetadata represents metadata fetched from the upstream repository
+	// The user-facing (i.e. pretty) chart name
+	DisplayName string
+	// Filtered subset of versions to be fetched
+	FetchVersions repo.ChartVersions
+	// Path stores the package path in current repository
+	Path string
+	// LatestStored stores the latest version of the chart currently in the repo
+	LatestStored repo.ChartVersion
+	// SourceMetadata represents metadata fetched from the upstream repository
 	SourceMetadata *fetcher.ChartSourceMetadata
-	//UpstreamYaml represents the values set in the package's upstream.yaml file
+	// The package's upstream.yaml file
 	UpstreamYaml *parse.UpstreamYaml
-	//Chart vendor
+	// The user-facing (i.e. pretty) chart vendor name
 	Vendor string
-	//Formatted version of chart vendor
+	// The developer-facing chart vendor name
 	ParsedVendor string
 }
 
