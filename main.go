@@ -162,7 +162,9 @@ func (pw PackageWrapper) GetOverlayFiles() (map[string][]byte, error) {
 	overlayFiles := map[string][]byte{}
 	overlayDir := filepath.Join(pw.Path, "overlay")
 	err := filepath.WalkDir(overlayDir, func(path string, dirEntry fs.DirEntry, err error) error {
-		if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fs.SkipAll
+		} else if err != nil {
 			return fmt.Errorf("error related to %q: %w", path, err)
 		}
 		if dirEntry.IsDir() {
@@ -692,9 +694,10 @@ func loadExistingCharts(vendor string, packageName string) ([]*chart.Chart, erro
 		} else if !matched {
 			continue
 		}
-		existingChart, err := loader.LoadFile(tgzFile.Name())
+		existingChartPath := filepath.Join(assetsPath, tgzFile.Name())
+		existingChart, err := loader.LoadFile(existingChartPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load chart %q: %w", tgzFile.Name(), err)
+			return nil, fmt.Errorf("failed to load chart version %q: %w", existingChartPath, err)
 		}
 		existingCharts = append(existingCharts, existingChart)
 	}
@@ -1029,7 +1032,13 @@ func writeIndex() error {
 		for _, chartVersion := range entries {
 			iconURL, err := icons.GetDownloadedIconPath(chartVersion.Name)
 			if err != nil {
-				return fmt.Errorf("failed to get downloaded icon path: %w", err)
+				// TODO: return an error here instead of simply logging it.
+				// Logged errors can be ignored; errors that prevent the user
+				// from completing their task get fixed. But the errors in
+				// rancher/partner-charts must be addressed before we can
+				// do this.
+				logrus.Errorf("failed to get downloaded icon path: %s", err)
+				continue
 			}
 			chartVersion.Icon = iconURL
 		}
@@ -1152,7 +1161,7 @@ func generateChanges(auto bool) {
 	skippedList := make([]string, 0)
 	for _, packageWrapper := range packageList {
 		if err := ApplyUpdates(packageWrapper); err != nil {
-			logrus.Error(err)
+			logrus.Errorf("failed to apply updates for chart %q: %s", packageWrapper.Name, err)
 			skippedList = append(skippedList, packageWrapper.Name)
 		}
 	}
