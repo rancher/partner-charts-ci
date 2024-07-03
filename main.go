@@ -57,6 +57,21 @@ var (
 	commit  = "HEAD"
 )
 
+// ChartWrapper is like a chart.Chart, but it tracks whether the chart
+// has been modified so that we can avoid making changes to chart
+// artifacts when the chart has not been modified.
+type ChartWrapper struct {
+	*chart.Chart
+	Modified bool
+}
+
+func NewChartWrapper(helmChart *chart.Chart) *ChartWrapper {
+	return &ChartWrapper{
+		Chart:    helmChart,
+		Modified: false,
+	}
+}
+
 // PackageWrapper is a representation of relevant package metadata
 type PackageWrapper struct {
 	//Chart Display Name
@@ -625,7 +640,7 @@ func ApplyUpdates(packageWrapper PackageWrapper) error {
 	}
 
 	// for new charts, convert repo.ChartVersions to *chart.Chart
-	newCharts := make([]*chart.Chart, 0, len(packageWrapper.FetchVersions))
+	newCharts := make([]*ChartWrapper, 0, len(packageWrapper.FetchVersions))
 	for _, chartVersion := range packageWrapper.FetchVersions {
 		var newChart *chart.Chart
 		var err error
@@ -638,14 +653,14 @@ func ApplyUpdates(packageWrapper PackageWrapper) error {
 			return fmt.Errorf("failed to fetch chart: %w", err)
 		}
 		newChart.Metadata.Version = chartVersion.Version
-		newCharts = append(newCharts, newChart)
+		newCharts = append(newCharts, NewChartWrapper(newChart))
 	}
 
 	if err := integrateCharts(packageWrapper, existingCharts, newCharts); err != nil {
 		return fmt.Errorf("failed to reconcile charts for package %q: %w", packageWrapper.Name, err)
 	}
 
-	allCharts := make([]*chart.Chart, 0, len(existingCharts)+len(newCharts))
+	allCharts := make([]*ChartWrapper, 0, len(existingCharts)+len(newCharts))
 	allCharts = append(allCharts, existingCharts...)
 	allCharts = append(allCharts, newCharts...)
 	if err := writeCharts(packageWrapper, allCharts); err != nil {
@@ -655,7 +670,13 @@ func ApplyUpdates(packageWrapper PackageWrapper) error {
 	return nil
 }
 
-func writeCharts(packageWrapper PackageWrapper, helmCharts []*chart.Chart) error {
+// Copied from helm's chartutil.Save, which unfortunately does
+// not split it out into a separate function.
+func getTgzFilename(helmChart *chart.Chart) string {
+	return fmt.Sprintf("%s-%s.tgz", helmChart.Name(), helmChart.Metadata.Version)
+}
+
+func writeCharts(packageWrapper PackageWrapper, chartWrappers []*ChartWrapper) error {
 	chartsDir := filepath.Join(getRepoRoot(), repositoryChartsDir, packageWrapper.ParsedVendor, packageWrapper.Name)
 	assetsDir := filepath.Join(getRepoRoot(), repositoryAssetsDir, packageWrapper.ParsedVendor)
 
@@ -663,27 +684,36 @@ func writeCharts(packageWrapper PackageWrapper, helmCharts []*chart.Chart) error
 		return fmt.Errorf("failed to wipe existing charts directory: %w", err)
 	}
 
-	for _, helmChart := range helmCharts {
-		assetsPath, err := chartutil.Save(helmChart, assetsDir)
-		if err != nil {
-			return fmt.Errorf("failed to write tgz for %q version %q: %w", helmChart.Name(), helmChart.Metadata.Version, err)
+	for _, chartWrapper := range chartWrappers {
+		assetsFilename := getTgzFilename(chartWrapper.Chart)
+		assetsPath := filepath.Join(assetsDir, assetsFilename)
+		tgzFileExists := icons.Exists(assetsPath)
+		if chartWrapper.Modified || !tgzFileExists {
+			_, err := chartutil.Save(chartWrapper.Chart, assetsDir)
+			if err != nil {
+				return fmt.Errorf("failed to write tgz for %q version %q: %w", chartWrapper.Name(), chartWrapper.Metadata.Version, err)
+			}
 		}
-		chartsPath := filepath.Join(chartsDir, helmChart.Metadata.Version)
-		if err := conform.Gunzip(assetsPath, chartsPath); err != nil {
-			return fmt.Errorf("failed to unpack %q version %q to %q: %w", helmChart.Name(), helmChart.Metadata.Version, chartsPath, err)
+
+		chartsPath := filepath.Join(chartsDir, chartWrapper.Metadata.Version)
+		chartsPathExists := icons.Exists(chartsPath)
+		if chartWrapper.Modified || !chartsPathExists {
+			if err := conform.Gunzip(assetsPath, chartsPath); err != nil {
+				return fmt.Errorf("failed to unpack %q version %q to %q: %w", chartWrapper.Name(), chartWrapper.Metadata.Version, chartsPath, err)
+			}
 		}
 	}
 
 	return nil
 }
 
-func loadExistingCharts(vendor string, packageName string) ([]*chart.Chart, error) {
+func loadExistingCharts(vendor string, packageName string) ([]*ChartWrapper, error) {
 	assetsPath := filepath.Join(getRepoRoot(), repositoryAssetsDir, vendor)
 	tgzFiles, err := os.ReadDir(assetsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read dir %q: %w", assetsPath, err)
 	}
-	existingCharts := make([]*chart.Chart, 0, len(tgzFiles))
+	existingChartWrappers := make([]*ChartWrapper, 0, len(tgzFiles))
 	for _, tgzFile := range tgzFiles {
 		if tgzFile.IsDir() {
 			continue
@@ -699,9 +729,10 @@ func loadExistingCharts(vendor string, packageName string) ([]*chart.Chart, erro
 		if err != nil {
 			return nil, fmt.Errorf("failed to load chart version %q: %w", existingChartPath, err)
 		}
-		existingCharts = append(existingCharts, existingChart)
+		existingChartWrapper := NewChartWrapper(existingChart)
+		existingChartWrappers = append(existingChartWrappers, existingChartWrapper)
 	}
-	return existingCharts, nil
+	return existingChartWrappers, nil
 }
 
 // integrateCharts integrates new charts from upstream with any
@@ -709,26 +740,27 @@ func loadExistingCharts(vendor string, packageName string) ([]*chart.Chart, erro
 // ensures that the state of all charts, both current and new, is
 // correct. Should never modify an existing chart, except for in
 // the special case of the "featured" annotation.
-func integrateCharts(packageWrapper PackageWrapper, existingCharts, newCharts []*chart.Chart) error {
+func integrateCharts(packageWrapper PackageWrapper, existingCharts, newCharts []*ChartWrapper) error {
 	overlayFiles, err := packageWrapper.GetOverlayFiles()
 	if err != nil {
 		return fmt.Errorf("failed to get overlay files: %w", err)
 	}
 
 	for _, newChart := range newCharts {
-		if err := applyOverlayFiles(overlayFiles, newChart); err != nil {
+		if err := applyOverlayFiles(overlayFiles, newChart.Chart); err != nil {
 			return fmt.Errorf("failed to apply overlay files to chart %q version %q: %w", newChart.Name(), newChart.Metadata.Version, err)
 		}
-		conform.OverlayChartMetadata(newChart, packageWrapper.UpstreamYaml.ChartYaml)
-		if err := addAnnotations(packageWrapper, newChart); err != nil {
+		conform.OverlayChartMetadata(newChart.Chart, packageWrapper.UpstreamYaml.ChartYaml)
+		if err := addAnnotations(packageWrapper, newChart.Chart); err != nil {
 			return fmt.Errorf("failed to add annotations to chart %q version %q: %w", newChart.Name(), newChart.Metadata.Version, err)
 		}
-		if err := ensureIcon(packageWrapper, newChart); err != nil {
+		if err := ensureIcon(packageWrapper, newChart.Chart); err != nil {
 			return fmt.Errorf("failed to ensure icon for chart %q version %q: %w", newChart.Name(), newChart.Metadata.Version, err)
 		}
+		newChart.Modified = true
 	}
 
-	if _, err := ensureFeaturedAnnotation(existingCharts, newCharts); err != nil {
+	if err := ensureFeaturedAnnotation(existingCharts, newCharts); err != nil {
 		return fmt.Errorf("failed to ensure featured annotation: %w", err)
 	}
 
@@ -838,10 +870,8 @@ func addAnnotations(packageWrapper PackageWrapper, helmChart *chart.Chart) error
 // charts. Is separate from setting other annotations because only the latest
 // chart version for a given package must have the "featured" annotation, so
 // this function must consider and possibly modify all of the package's chart
-// versions. Returns a slice of modified charts.
-func ensureFeaturedAnnotation(existingCharts, newCharts []*chart.Chart) ([]*chart.Chart, error) {
-	modifiedCharts := make([]*chart.Chart, 0, len(existingCharts)+len(newCharts))
-
+// versions.
+func ensureFeaturedAnnotation(existingCharts, newCharts []*ChartWrapper) error {
 	// get current value of featured annotation
 	featuredAnnotationValue := ""
 	for _, existingChart := range existingCharts {
@@ -850,13 +880,13 @@ func ensureFeaturedAnnotation(existingCharts, newCharts []*chart.Chart) ([]*char
 			continue
 		}
 		if featuredAnnotationValue != "" && featuredAnnotationValue != val {
-			return nil, fmt.Errorf("found two different values for featured annotation %q and %q", featuredAnnotationValue, val)
+			return fmt.Errorf("found two different values for featured annotation %q and %q", featuredAnnotationValue, val)
 		}
 		featuredAnnotationValue = val
 	}
 	if featuredAnnotationValue == "" {
 		// the chart is not featured
-		return modifiedCharts, nil
+		return nil
 	}
 
 	// set featured annotation on last of new charts
@@ -869,20 +899,20 @@ func ensureFeaturedAnnotation(existingCharts, newCharts []*chart.Chart) ([]*char
 	// one chart (kasten/k10) uses a value for UpstreamYaml.Fetch other than the
 	// default value of "latest", and that chart is not featured.
 	lastNewChart := newCharts[len(newCharts)-1]
-	if conform.AnnotateChart(lastNewChart, annotationFeatured, featuredAnnotationValue, true) {
-		modifiedCharts = append(modifiedCharts, lastNewChart)
+	if conform.AnnotateChart(lastNewChart.Chart, annotationFeatured, featuredAnnotationValue, true) {
+		lastNewChart.Modified = true
 	}
 
 	// Ensure featured annotation is not present on existing charts. We don't
 	// need to worry about other new charts because they will not have the
 	// featured annotation.
 	for _, existingChart := range existingCharts {
-		if conform.DeannotateChart(existingChart, annotationFeatured, "") {
-			modifiedCharts = append(modifiedCharts, existingChart)
+		if conform.DeannotateChart(existingChart.Chart, annotationFeatured, "") {
+			existingChart.Modified = true
 		}
 	}
 
-	return modifiedCharts, nil
+	return nil
 }
 
 func getLatestTracked(tracked []string) *semver.Version {
