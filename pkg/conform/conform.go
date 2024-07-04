@@ -61,12 +61,9 @@ func OverlayChartMetadata(helmChart *chart.Chart, overlay chart.Metadata) {
 			AnnotateChart(helmChart, annotation, value, true)
 		}
 	}
-	/* Leaving in place, commented, to match upstream Helm metadata
-	   Annotation 'catalog.cattle.io/kube-version' is prefered
 	if overlay.KubeVersion != "" {
 		helmChart.Metadata.KubeVersion = overlay.KubeVersion
 	}
-	*/
 	if overlay.Dependencies != nil {
 		helmChart.Metadata.Dependencies = append(helmChart.Metadata.Dependencies, overlay.Dependencies...)
 	}
@@ -163,10 +160,7 @@ func StripPackageVersion(chartVersion string) string {
 	return version.String()
 }
 
-func GeneratePackageVersion(upstreamChartVersion string, packageVersion *int, version string) (string, error) {
-	if version != "" {
-		return version, nil
-	}
+func GeneratePackageVersion(upstreamChartVersion string, packageVersion *int) (string, error) {
 	if packageVersion != nil {
 		chartVersion, err := semver.NewVersion(upstreamChartVersion)
 		if err != nil {
@@ -177,6 +171,10 @@ func GeneratePackageVersion(upstreamChartVersion string, packageVersion *int, ve
 			return "", fmt.Errorf("package version %d is greater than maximum of %d", *packageVersion, MaxPatchNum)
 		}
 
+		// TODO: when chartVersion.Patch() == 0, then we get a patch version of 1,
+		// assuming PatchVersion is set to 1 in the upstream.yaml (which it is for
+		// all packages that set PatchVersion at the time of writing). I don't
+		// think this is the intent of the function, so this behavior should be fixed.
 		patchVersion := PatchNumMultiplier*chartVersion.Patch() + uint64(*packageVersion)
 
 		split := strings.Split(chartVersion.String(), ".")
