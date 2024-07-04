@@ -1041,49 +1041,65 @@ func readIndex() (*repo.IndexFile, error) {
 	return helmIndexYaml, err
 }
 
-// Writes out modified index file
+// writeIndex is the only way that index.yaml should ever be written.
+// It looks at the set of charts in the assets directory and generates
+// a new index.yaml file from their metadata. Some information from
+// the old index.yaml file is used to avoid making unnecessary changes,
+// but for the most part this function enforces the idea that the
+// index.yaml file should treat the charts' Chart.yaml files as the
+// authoritative source of chart metadata.
 func writeIndex() error {
 	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
-	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
+	assetsDirectoryPath := filepath.Join(getRepoRoot(), repositoryAssetsDir)
+	newHelmIndexYaml, err := repo.IndexDirectory(assetsDirectoryPath, repositoryAssetsDir)
+	if err != nil {
+		return fmt.Errorf("failed to index assets directory: %w", err)
+	}
+
+	oldHelmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
 	if errors.Is(err, os.ErrNotExist) {
-		helmIndexYaml = repo.NewIndexFile()
+		if err := newHelmIndexYaml.WriteFile(indexFilePath, 0o644); err != nil {
+			return fmt.Errorf("failed to write index.yaml: %w", err)
+		}
+		return nil
 	} else if err != nil {
 		return fmt.Errorf("failed to load index.yaml: %w", err)
 	}
 
-	assetsDirectoryPath := filepath.Join(getRepoRoot(), repositoryAssetsDir)
-	newHelmIndexYaml, err := repo.IndexDirectory(assetsDirectoryPath, repositoryAssetsDir)
-	if err != nil {
-		return err
-	}
-	helmIndexYaml.Merge(newHelmIndexYaml)
-	helmIndexYaml.SortEntries()
+	for chartName, newChartVersions := range newHelmIndexYaml.Entries {
+		for _, newChartVersion := range newChartVersions {
+			// Use the values of created field from old index.yaml to avoid making
+			// unnecessary changes, since it is set to time.Now() in repo.LoadIndexFile.
+			oldChartVersion, err := oldHelmIndexYaml.Get(chartName, newChartVersion.Version)
+			if err == nil {
+				newChartVersion.Created = oldChartVersion.Created
+			}
 
-	// Older chart versions cannot be changed, and may have remote (i.e.
-	// not beginning with file://) icon URLs. So instead of changing the
-	// icon URL in the Chart.yaml for these chart versions, we change it in
-	// the index.yaml. This works because Rancher uses the icon URL
-	// value from index.yaml, not the chart itself, when loading a chart's
-	// icon.
-	for _, entries := range helmIndexYaml.Entries {
-		for _, chartVersion := range entries {
-			iconURL, err := icons.GetDownloadedIconPath(chartVersion.Name)
+			// Older charts cannot be changed, and may have remote (i.e. not
+			// beginning with file://) icon URLs. So instead of changing the
+			// icon URL in the Chart.yaml and allowing it to propagate automatically
+			// to the index.yaml for these chart versions, we change it only in
+			// the index.yaml. This works because Rancher uses the icon URL
+			// value from index.yaml, not the chart itself, when loading a chart's
+			// icon.
+			iconURL, err := icons.GetDownloadedIconPath(newChartVersion.Name)
 			if err != nil {
 				// TODO: return an error here instead of simply logging it.
 				// Logged errors can be ignored; errors that prevent the user
 				// from completing their task get fixed. But the errors in
 				// rancher/partner-charts must be addressed before we can
 				// do this.
-				logrus.Errorf("failed to get downloaded icon path: %s", err)
-				continue
+				logrus.Errorf("failed to get downloaded icon path for chart %q version %q: %s", newChartVersion.Name, newChartVersion.Version, err)
+			} else {
+				newChartVersion.Icon = iconURL
 			}
-			chartVersion.Icon = iconURL
 		}
 	}
 
-	err = helmIndexYaml.WriteFile(indexFilePath, 0644)
-	if err != nil {
-		return err
+	newHelmIndexYaml.SortEntries()
+
+	if err := newHelmIndexYaml.WriteFile(indexFilePath, 0o644); err != nil {
+		return fmt.Errorf("failed to write index.yaml: %w", err)
 	}
 
 	return nil
