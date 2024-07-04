@@ -639,7 +639,7 @@ func parseVendor(upstreamYamlVendor, chartName, packagePath string) (string, str
 }
 
 func ApplyUpdates(packageWrapper PackageWrapper) error {
-	logrus.Debugf("Conforming package from %s\n", packageWrapper.Path)
+	logrus.Debugf("Applying updates for package %s/%s\n", packageWrapper.ParsedVendor, packageWrapper.Name)
 
 	existingCharts, err := loadExistingCharts(packageWrapper.ParsedVendor, packageWrapper.Name)
 	if err != nil {
