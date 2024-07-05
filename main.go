@@ -127,20 +127,14 @@ func (p PackageList) Less(i, j int) bool {
 // latest upstream chart version in PackageWrapper.FetchVersions.
 // Returns true if newer package version is available.
 func (packageWrapper *PackageWrapper) populate(onlyLatest bool) (bool, error) {
-	upstreamYaml, err := parse.ParseUpstreamYaml(packageWrapper.Path)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse upstream.yaml: %w", err)
-	}
-	packageWrapper.UpstreamYaml = &upstreamYaml
-
 	sourceMetadata, err := generateChartSourceMetadata(*packageWrapper.UpstreamYaml)
 	if err != nil {
 		return false, err
 	}
-
+	if sourceMetadata.Versions[0].Name != packageWrapper.Name {
+		logrus.Warnf("upstream name %q does not match package name %q", sourceMetadata.Versions[0].Name, packageWrapper.Name)
+	}
 	packageWrapper.SourceMetadata = sourceMetadata
-	packageWrapper.Name = sourceMetadata.Versions[0].Name
-	packageWrapper.Vendor, packageWrapper.ParsedVendor = parseVendor(packageWrapper.UpstreamYaml.Vendor, packageWrapper.Name, packageWrapper.Path)
 
 	if onlyLatest {
 		packageWrapper.UpstreamYaml.Fetch = "latest"
@@ -161,12 +155,6 @@ func (packageWrapper *PackageWrapper) populate(onlyLatest bool) (bool, error) {
 	packageWrapper.LatestStored, err = getLatestStoredVersion(packageWrapper.Name)
 	if err != nil {
 		return false, err
-	}
-
-	if packageWrapper.UpstreamYaml.DisplayName != "" {
-		packageWrapper.DisplayName = packageWrapper.UpstreamYaml.DisplayName
-	} else {
-		packageWrapper.DisplayName = packageWrapper.Name
 	}
 
 	if len(packageWrapper.FetchVersions) == 0 {
@@ -285,12 +273,6 @@ func getRepoRoot() string {
 	}
 
 	return repoRoot
-}
-
-func getRelativePath(packagePath string) string {
-	packagePath = filepath.ToSlash(packagePath)
-	packagesPath := filepath.Join(getRepoRoot(), repositoryPackagesDir)
-	return strings.TrimPrefix(packagePath, packagesPath)
 }
 
 func gitCleanup() error {
@@ -602,29 +584,6 @@ func generateChartSourceMetadata(upstreamYaml parse.UpstreamYaml) (*fetcher.Char
 	}
 
 	return &sourceMetadata, nil
-}
-
-func parseVendor(upstreamYamlVendor, chartName, packagePath string) (string, string) {
-	var vendor, vendorPath string
-	packagePath = filepath.ToSlash(packagePath)
-	packageRelativePath := getRelativePath(packagePath)
-	if len(strings.Split(packageRelativePath, "/")) > 2 {
-		vendorPath = strings.TrimPrefix(filepath.Dir(packageRelativePath), "/")
-	} else {
-		vendorPath = strings.TrimPrefix(packageRelativePath, "/")
-	}
-
-	if upstreamYamlVendor != "" {
-		vendor = upstreamYamlVendor
-	} else if len(vendorPath) > 0 {
-		vendor = vendorPath
-	} else {
-		vendor = chartName
-	}
-
-	parsedVendor := strings.ReplaceAll(strings.ToLower(vendor), " ", "-")
-
-	return vendor, parsedVendor
 }
 
 func ApplyUpdates(packageWrapper PackageWrapper) error {
@@ -1096,38 +1055,68 @@ func writeIndex() error {
 	return nil
 }
 
-// Generates list of package paths with upstream yaml available
-func generatePackageList(currentPackage string) PackageList {
-	packageDirectory := filepath.Join(getRepoRoot(), repositoryPackagesDir)
-	packageMap, err := parse.ListPackages(packageDirectory, currentPackage)
+// listPackages reads packages and their upstream.yaml from the packages
+// directory and returns them in a slice. If currentPackage is specified,
+// it must be in <vendor>/<name> format (i.e. the "full" package name).
+// If currentPackage is specified, the function returns a slice with only
+// one element, which is the specified package.
+func listPackages(currentPackage string) (PackageList, error) {
+	var globPattern string
+	if currentPackage == "" {
+		globPattern = repositoryPackagesDir + "/*/*"
+	} else {
+		globPattern = filepath.Join(repositoryPackagesDir, currentPackage)
+	}
+	matches, err := filepath.Glob(globPattern)
 	if err != nil {
-		logrus.Error(err)
+		return nil, fmt.Errorf("failed to glob for packages")
 	}
 
-	// get sorted list of package names
-	packageNames := make([]string, 0, len(packageMap))
-	for packageName := range packageMap {
-		packageNames = append(packageNames, packageName)
-	}
-	sort.Strings(packageNames)
-
-	// construct list of PackageWrappers
-	packageList := make(PackageList, 0, len(packageNames))
-	for _, packageName := range packageNames {
-		packageWrapper := PackageWrapper{
-			Path: packageMap[packageName],
+	packageList := make(PackageList, 0, len(matches))
+	for _, match := range matches {
+		parts := strings.Split(match, "/")
+		if len(parts) != 3 {
+			return nil, fmt.Errorf("failed to split %q into 3 parts", match)
 		}
+		packageWrapper := PackageWrapper{
+			Path:         match,
+			ParsedVendor: parts[1],
+			Name:         parts[2],
+		}
+
+		upstreamYaml, err := parse.ParseUpstreamYaml(packageWrapper.Path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse upstream.yaml: %w", err)
+		}
+		packageWrapper.UpstreamYaml = &upstreamYaml
+
+		if packageWrapper.UpstreamYaml.Vendor != "" {
+			packageWrapper.Vendor = packageWrapper.UpstreamYaml.Vendor
+		} else {
+			packageWrapper.Vendor = packageWrapper.ParsedVendor
+		}
+
+		if packageWrapper.UpstreamYaml.DisplayName != "" {
+			packageWrapper.DisplayName = packageWrapper.UpstreamYaml.DisplayName
+		} else {
+			packageWrapper.DisplayName = packageWrapper.Name
+		}
+
 		packageList = append(packageList, packageWrapper)
 	}
 
-	return packageList
+	return packageList, nil
 }
 
 // Populates list of package wrappers, handles manual and automatic variation
 // If print, function will print information during processing
 func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, print bool) (PackageList, error) {
 	packageList := make(PackageList, 0)
-	for _, packageWrapper := range generatePackageList(currentPackage) {
+	packageWrappers, err := listPackages(currentPackage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list packages: %w", err)
+	}
+	for _, packageWrapper := range packageWrappers {
 		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
 		updated, err := packageWrapper.populate(onlyLatest)
 		if err != nil {
@@ -1229,8 +1218,11 @@ func generateChanges(auto bool) {
 }
 
 // CLI function call - Prints list of available packages to STDout
-func listPackages(c *cli.Context) {
-	packageList := generatePackageList(os.Getenv(packageEnvVariable))
+func cmdListPackages(c *cli.Context) error {
+	packageList, err := listPackages(os.Getenv(packageEnvVariable))
+	if err != nil {
+		return fmt.Errorf("failed to list packages: %w", err)
+	}
 	vendorSorted := make([]string, 0)
 	for _, packageWrapper := range packageList {
 		packagesPath := filepath.Join(getRepoRoot(), repositoryPackagesDir)
@@ -1246,10 +1238,12 @@ func listPackages(c *cli.Context) {
 	for _, pkg := range vendorSorted {
 		fmt.Println(pkg)
 	}
+
+	return nil
 }
 
 // CLI function call - Appends annotaion to feature chart in Rancher UI
-func addFeaturedChart(c *cli.Context) {
+func addFeaturedChart(c *cli.Context) error {
 	if len(c.Args()) != 2 {
 		logrus.Fatalf("Please provide the chart name and featured number (1 - %d) as arguments\n", featuredMax)
 	}
@@ -1262,9 +1256,12 @@ func addFeaturedChart(c *cli.Context) {
 		logrus.Fatalf("Featured number must be between %d and %d\n", 1, featuredMax)
 	}
 
-	packageList := generatePackageList(featuredChart)
+	packageList, err := listPackages(featuredChart)
+	if err != nil {
+		return fmt.Errorf("failed to list packages: %w", err)
+	}
 	if len(packageList) == 0 {
-		logrus.Fatalf("Package '%s' not available\n", featuredChart)
+		return fmt.Errorf("package %q not available\n", featuredChart)
 	}
 
 	packageList, err = populatePackages(featuredChart, false, false, false)
@@ -1289,6 +1286,8 @@ func addFeaturedChart(c *cli.Context) {
 			logrus.Fatalf("failed to write index: %s", err)
 		}
 	}
+
+	return nil
 }
 
 // CLI function call - Appends annotaion to feature chart in Rancher UI
@@ -1564,7 +1563,7 @@ func main() {
 		{
 			Name:   "list",
 			Usage:  "Print a list of all tracked upstreams in current repository",
-			Action: listPackages,
+			Action: cmdListPackages,
 		},
 		{
 			Name:   "auto",
