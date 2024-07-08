@@ -717,7 +717,9 @@ func writeCharts(packageWrapper PackageWrapper, chartWrappers []*ChartWrapper) e
 func loadExistingCharts(vendor string, packageName string) ([]*ChartWrapper, error) {
 	assetsPath := filepath.Join(getRepoRoot(), repositoryAssetsDir, vendor)
 	tgzFiles, err := os.ReadDir(assetsPath)
-	if err != nil {
+	if errors.Is(err, os.ErrNotExist) {
+		return []*ChartWrapper{}, nil
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to read dir %q: %w", assetsPath, err)
 	}
 	existingChartWrappers := make([]*ChartWrapper, 0, len(tgzFiles))
