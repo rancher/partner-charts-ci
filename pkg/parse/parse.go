@@ -1,9 +1,7 @@
 package parse
 
 import (
-	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -15,18 +13,8 @@ import (
 )
 
 const (
-	PackageOptionsFile  = "package.yaml"
 	UpstreamOptionsFile = "upstream.yaml"
 )
-
-type PackageYaml struct {
-	Commit         string `json:"commit,omitempty"`
-	PackageVersion int    `json:"packageVersion,omitempty"`
-	Path           string `json:"-"`
-	SubDirectory   string `json:"subdirectory,omitempty"`
-	Url            string `json:"url"`
-	Version        string `json:"version,omitempty"`
-}
 
 type UpstreamYaml struct {
 	AHPackageName      string         `json:"ArtifactHubPackage"`
@@ -49,42 +37,6 @@ type UpstreamYaml struct {
 	TrackVersions      []string       `json:"TrackVersions"`
 	ReleaseName        string         `json:"ReleaseName"`
 	Vendor             string         `json:"Vendor"`
-}
-
-func (packageYaml PackageYaml) Write(overWrite bool) error {
-	filePath := path.Join(packageYaml.Path, PackageOptionsFile)
-	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
-		if !overWrite {
-			return nil
-		} else {
-			if err := packageYaml.Remove(); err != nil {
-				return fmt.Errorf("failed to remove package.yaml: %w", err)
-			}
-		}
-	}
-
-	packageYamlFile, err := yaml.Marshal(packageYaml)
-	if err != nil {
-		return err
-	}
-
-	err = os.WriteFile(filePath, packageYamlFile, 0644)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (packageYaml PackageYaml) Remove() error {
-	logrus.Debugf("Removing package yaml from %s\n", packageYaml.Path)
-	filePath := path.Join(packageYaml.Path, PackageOptionsFile)
-	err := os.Remove(filePath)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func ListPackages(packageDirectory string, currentPackage string) (map[string]string, error) {
