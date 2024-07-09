@@ -431,17 +431,6 @@ func commitChanges(updatedList PackageList, iconOverride bool) error {
 	return nil
 }
 
-// Cleans up ephemeral chart directory files from package prepare
-func cleanPackage(packagePath string) error {
-	packageName := strings.TrimPrefix(getRelativePath(packagePath), "/")
-	logrus.Infof("Cleaning package %s\n", packageName)
-	chartsPath := path.Join(packagePath, repositoryChartsDir)
-	if err := os.RemoveAll(chartsPath); err != nil {
-		return fmt.Errorf("failed to remove charts directory: %w", err)
-	}
-	return nil
-}
-
 func collectTrackedVersions(upstreamVersions repo.ChartVersions, tracked []string) map[string]repo.ChartVersions {
 	trackedVersions := make(map[string]repo.ChartVersions)
 
@@ -1387,17 +1376,6 @@ func hideChart(c *cli.Context) {
 	}
 }
 
-// CLI function call - Cleans package object(s)
-func cleanCharts(c *cli.Context) {
-	packageList := generatePackageList(os.Getenv(packageEnvVariable))
-	for _, packageWrapper := range packageList {
-		err := cleanPackage(packageWrapper.Path)
-		if err != nil {
-			logrus.Error(err)
-		}
-	}
-}
-
 // CLI function call - Generates all changes for available packages,
 // Checking against upstream version, prepare, patch, clean, and index update
 // Does not commit
@@ -1587,11 +1565,6 @@ func main() {
 			Name:   "list",
 			Usage:  "Print a list of all tracked upstreams in current repository",
 			Action: listPackages,
-		},
-		{
-			Name:   "clean",
-			Usage:  "Clean up ephemeral chart directory",
-			Action: cleanCharts,
 		},
 		{
 			Name:   "auto",
