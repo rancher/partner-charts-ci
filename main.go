@@ -1055,12 +1055,12 @@ func writeIndex() error {
 	return nil
 }
 
-// listPackages reads packages and their upstream.yaml from the packages
+// listPackageWrappers reads packages and their upstream.yaml from the packages
 // directory and returns them in a slice. If currentPackage is specified,
 // it must be in <vendor>/<name> format (i.e. the "full" package name).
 // If currentPackage is specified, the function returns a slice with only
 // one element, which is the specified package.
-func listPackages(currentPackage string) (PackageList, error) {
+func listPackageWrappers(currentPackage string) (PackageList, error) {
 	var globPattern string
 	if currentPackage == "" {
 		globPattern = repositoryPackagesDir + "/*/*"
@@ -1112,7 +1112,7 @@ func listPackages(currentPackage string) (PackageList, error) {
 // If print, function will print information during processing
 func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, print bool) (PackageList, error) {
 	packageList := make(PackageList, 0)
-	packageWrappers, err := listPackages(currentPackage)
+	packageWrappers, err := listPackageWrappers(currentPackage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list packages: %w", err)
 	}
@@ -1218,8 +1218,8 @@ func generateChanges(auto bool) {
 }
 
 // CLI function call - Prints list of available packages to STDout
-func cmdListPackages(c *cli.Context) error {
-	packageList, err := listPackages(os.Getenv(packageEnvVariable))
+func listPackages(c *cli.Context) error {
+	packageList, err := listPackageWrappers(os.Getenv(packageEnvVariable))
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
 	}
@@ -1256,7 +1256,7 @@ func addFeaturedChart(c *cli.Context) error {
 		logrus.Fatalf("Featured number must be between %d and %d\n", 1, featuredMax)
 	}
 
-	packageList, err := listPackages(featuredChart)
+	packageList, err := listPackageWrappers(featuredChart)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
 	}
@@ -1563,7 +1563,7 @@ func main() {
 		{
 			Name:   "list",
 			Usage:  "Print a list of all tracked upstreams in current repository",
-			Action: cmdListPackages,
+			Action: listPackages,
 		},
 		{
 			Name:   "auto",
