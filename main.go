@@ -858,10 +858,11 @@ func getLatestTracked(tracked []string) *semver.Version {
 }
 
 func getStoredVersions(chartName string) (repo.ChartVersions, error) {
-	helmIndexYaml, err := readIndex()
 	storedVersions := repo.ChartVersions{}
+	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
+	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
 	if err != nil {
-		return storedVersions, err
+		return storedVersions, fmt.Errorf("failed to load index file: %w", err)
 	}
 	if val, ok := helmIndexYaml.Entries[chartName]; ok {
 		storedVersions = append(storedVersions, val...)
@@ -872,10 +873,11 @@ func getStoredVersions(chartName string) (repo.ChartVersions, error) {
 
 // Fetches latest stored version of chart from current index, if any
 func getLatestStoredVersion(chartName string) (repo.ChartVersion, error) {
-	helmIndexYaml, err := readIndex()
 	latestVersion := repo.ChartVersion{}
+	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
+	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
 	if err != nil {
-		return latestVersion, err
+		return latestVersion, fmt.Errorf("failed to load index file: %w", err)
 	}
 	if val, ok := helmIndexYaml.Entries[chartName]; ok {
 		latestVersion = *val[0]
@@ -889,7 +891,8 @@ func getLatestStoredVersion(chartName string) (repo.ChartVersion, error) {
 // all repo.ChartVersions that have the specified annotation will be
 // returned, regardless of that annotation's value.
 func getByAnnotation(annotation, value string) map[string]repo.ChartVersions {
-	indexYaml, err := readIndex()
+	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
+	indexYaml, err := repo.LoadIndexFile(indexFilePath)
 	if err != nil {
 		logrus.Fatalf("failed to read index.yaml: %s", err)
 	}
@@ -918,13 +921,6 @@ func getByAnnotation(annotation, value string) map[string]repo.ChartVersions {
 	}
 
 	return matchedVersions
-}
-
-// Reads in current index yaml
-func readIndex() (*repo.IndexFile, error) {
-	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
-	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
-	return helmIndexYaml, err
 }
 
 // writeIndex is the only way that index.yaml should ever be written.
