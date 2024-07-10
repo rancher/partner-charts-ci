@@ -1229,34 +1229,33 @@ func addFeaturedChart(c *cli.Context) error {
 	return nil
 }
 
-// CLI function call - Appends annotaion to feature chart in Rancher UI
-func removeFeaturedChart(c *cli.Context) {
+// removeFeaturedChart removes the "featured" annotation from a chart.
+func removeFeaturedChart(c *cli.Context) error {
 	if len(c.Args()) != 1 {
 		logrus.Fatal("Please provide the chart name as argument")
 	}
 	featuredChart := c.Args().Get(0)
-	packageMap, err := parse.ListPackages(repositoryPackagesDir, "")
+
+	packageList, err := listPackageWrappers(featuredChart)
 	if err != nil {
-		logrus.Fatal(err)
+		return fmt.Errorf("failed to list packages: %w", err)
 	}
-	if _, ok := packageMap[featuredChart]; !ok {
-		logrus.Fatalf("Package '%s' not available\n", featuredChart)
+	if len(packageList) == 0 {
+		return fmt.Errorf("package %q not found", featuredChart)
+	}
+	packageWrapper := packageList[0]
+
+	vendor := packageWrapper.ParsedVendor
+	chartName := packageWrapper.Name
+	if err := annotate(vendor, chartName, annotationFeatured, "", true, false); err != nil {
+		return fmt.Errorf("failed to deannotate %q: %w", packageWrapper.FullName(), err)
 	}
 
-	packageList, err := populatePackages(featuredChart, false, false, false)
-	if err != nil {
-		logrus.Fatal(err)
+	if err := writeIndex(); err != nil {
+		return fmt.Errorf("failed to write index: %w", err)
 	}
 
-	vendor := packageList[0].ParsedVendor
-	chartName := packageList[0].LatestStored.Name
-	err = annotate(vendor, chartName, annotationFeatured, "", true, false)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	if err = writeIndex(); err != nil {
-		logrus.Fatalf("failed to write index: %s", err)
-	}
+	return nil
 }
 
 func listFeaturedCharts(c *cli.Context) {
