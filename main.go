@@ -131,7 +131,7 @@ func (packageWrapper *PackageWrapper) FullName() string {
 // checks for updates. If onlyLatest is true, then it puts only the
 // latest upstream chart version in PackageWrapper.FetchVersions.
 // Returns true if newer package version is available.
-func (packageWrapper *PackageWrapper) populate(onlyLatest bool) (bool, error) {
+func (packageWrapper *PackageWrapper) Populate(onlyLatest bool) (bool, error) {
 	sourceMetadata, err := generateChartSourceMetadata(*packageWrapper.UpstreamYaml)
 	if err != nil {
 		return false, err
@@ -1050,7 +1050,7 @@ func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, 
 	}
 	for _, packageWrapper := range packageWrappers {
 		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
-		updated, err := packageWrapper.populate(onlyLatest)
+		updated, err := packageWrapper.Populate(onlyLatest)
 		if err != nil {
 			logrus.Error(err)
 			continue
