@@ -132,14 +132,14 @@ func (packageWrapper *PackageWrapper) FullName() string {
 // latest upstream chart version in PackageWrapper.FetchVersions.
 // Returns true if newer package version is available.
 func (packageWrapper *PackageWrapper) Populate(onlyLatest bool) (bool, error) {
-	sourceMetadata, err := generateChartSourceMetadata(*packageWrapper.UpstreamYaml)
+	sourceMetadata, err := fetcher.FetchUpstream(*packageWrapper.UpstreamYaml)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to fetch data from upstream: %w", err)
 	}
 	if sourceMetadata.Versions[0].Name != packageWrapper.Name {
 		logrus.Warnf("upstream name %q does not match package name %q", sourceMetadata.Versions[0].Name, packageWrapper.Name)
 	}
-	packageWrapper.SourceMetadata = sourceMetadata
+	packageWrapper.SourceMetadata = &sourceMetadata
 
 	if onlyLatest {
 		packageWrapper.UpstreamYaml.Fetch = "latest"
@@ -531,16 +531,6 @@ func filterVersions(upstreamVersions repo.ChartVersions, fetch string, tracked [
 	}
 
 	return filteredVersions, nil
-}
-
-// Generates source metadata representation based on upstream repository
-func generateChartSourceMetadata(upstreamYaml parse.UpstreamYaml) (*fetcher.ChartSourceMetadata, error) {
-	sourceMetadata, err := fetcher.FetchUpstream(upstreamYaml)
-	if err != nil {
-		return nil, err
-	}
-
-	return &sourceMetadata, nil
 }
 
 func ApplyUpdates(packageWrapper PackageWrapper) error {
