@@ -199,71 +199,31 @@ func (pw PackageWrapper) GetOverlayFiles() (map[string][]byte, error) {
 }
 
 func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bool) error {
-	var versionsToUpdate repo.ChartVersions
-
-	allStoredVersions, err := getStoredVersions(chartName)
+	existingCharts, err := loadExistingCharts(getRepoRoot(), vendor, chartName)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
 
+	chartsToUpdate := make([]*ChartWrapper, 0, len(existingCharts))
 	if onlyLatest {
-		versionsToUpdate = repo.ChartVersions{allStoredVersions[0]}
+		chartsToUpdate = append(chartsToUpdate, existingCharts[0])
 	} else {
-		versionsToUpdate = allStoredVersions
+		chartsToUpdate = existingCharts
 	}
 
-	for _, version := range versionsToUpdate {
-		modified := false
-
-		assetsPath := filepath.Join(
-			getRepoRoot(),
-			repositoryAssetsDir,
-			vendor,
-		)
-
-		versionPath := path.Join(
-			getRepoRoot(),
-			repositoryChartsDir,
-			vendor,
-			chartName,
-		)
-		helmChart, err := loader.LoadFile(version.URLs[0])
-		if err != nil {
-			return err
-		}
-
+	for _, chartToUpdate := range chartsToUpdate {
 		if remove {
-			modified = conform.RemoveChartAnnotations(helmChart, map[string]string{annotation: value})
+			chartToUpdate.Modified = conform.DeannotateChart(chartToUpdate.Chart, annotation, value)
 		} else {
-			modified = conform.ApplyChartAnnotations(helmChart, map[string]string{annotation: value}, true)
+			chartToUpdate.Modified = conform.AnnotateChart(chartToUpdate.Chart, annotation, value, true)
 		}
-
-		if modified {
-			logrus.Debugf("Modified annotations of %s (%s)\n", chartName, helmChart.Metadata.Version)
-
-			err = os.RemoveAll(versionPath)
-			if err != nil {
-				return err
-			}
-
-			_, err := chartutil.Save(helmChart, assetsPath)
-			if err != nil {
-				return fmt.Errorf("failed to save chart %q version %q: %w", helmChart.Name(), helmChart.Metadata.Version, err)
-			}
-			err = conform.ExportChartDirectory(helmChart, versionPath)
-			if err != nil {
-				return err
-			}
-
-			err = removeVersionFromIndex(chartName, *version)
-			if err != nil {
-				return err
-			}
-		}
-
 	}
 
-	return err
+	if err := writeCharts(vendor, chartName, existingCharts); err != nil {
+		return fmt.Errorf("failed to write charts: %w", err)
+	}
+
+	return nil
 }
 
 // Fetches absolute repository root path
@@ -619,7 +579,7 @@ func ApplyUpdates(packageWrapper PackageWrapper) error {
 	allCharts := make([]*ChartWrapper, 0, len(existingCharts)+len(newCharts))
 	allCharts = append(allCharts, existingCharts...)
 	allCharts = append(allCharts, newCharts...)
-	if err := writeCharts(packageWrapper, allCharts); err != nil {
+	if err := writeCharts(packageWrapper.ParsedVendor, packageWrapper.Name, allCharts); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
@@ -632,9 +592,14 @@ func getTgzFilename(helmChart *chart.Chart) string {
 	return fmt.Sprintf("%s-%s.tgz", helmChart.Name(), helmChart.Metadata.Version)
 }
 
-func writeCharts(packageWrapper PackageWrapper, chartWrappers []*ChartWrapper) error {
-	chartsDir := filepath.Join(getRepoRoot(), repositoryChartsDir, packageWrapper.ParsedVendor, packageWrapper.Name)
-	assetsDir := filepath.Join(getRepoRoot(), repositoryAssetsDir, packageWrapper.ParsedVendor)
+// writeCharts ensures that the relevant assets/ and charts/
+// directories for package <vendor>/<chartName> reflect the set of
+// packages passed in chartWrappers. In other words, charts that are
+// not in chartWrappers are deleted, and charts from chartWrappers
+// that are modified or do not exist on disk are written.
+func writeCharts(vendor, chartName string, chartWrappers []*ChartWrapper) error {
+	chartsDir := filepath.Join(getRepoRoot(), repositoryChartsDir, vendor, chartName)
+	assetsDir := filepath.Join(getRepoRoot(), repositoryAssetsDir, vendor)
 
 	if err := os.RemoveAll(chartsDir); err != nil {
 		return fmt.Errorf("failed to wipe existing charts directory: %w", err)
@@ -693,7 +658,7 @@ func loadExistingCharts(repoRoot string, vendor string, packageName string) ([]*
 		existingChartWrapper := NewChartWrapper(existingChart)
 		existingChartWrappers = append(existingChartWrappers, existingChartWrapper)
 	}
-	slices.SortFunc[[]*ChartWrapper, *ChartWrapper](existingChartWrappers, func(a, b *ChartWrapper) int {
+	slices.SortFunc(existingChartWrappers, func(a, b *ChartWrapper) int {
 		parsedA := semver.MustParse(a.Chart.Metadata.Version)
 		parsedB := semver.MustParse(b.Chart.Metadata.Version)
 		return parsedB.Compare(parsedA)
@@ -957,40 +922,6 @@ func getByAnnotation(annotation, value string) map[string]repo.ChartVersions {
 	}
 
 	return matchedVersions
-}
-
-func removeVersionFromIndex(chartName string, version repo.ChartVersion) error {
-	entryIndex := -1
-	indexYaml, err := readIndex()
-	if err != nil {
-		return err
-	}
-	if _, ok := indexYaml.Entries[chartName]; !ok {
-		return fmt.Errorf("%s not present in index entries", chartName)
-	}
-
-	indexEntries := indexYaml.Entries[chartName]
-
-	for i, entryVersion := range indexEntries {
-		if entryVersion.Version == version.Version {
-			entryIndex = i
-			break
-		}
-	}
-
-	if entryIndex >= 0 {
-		entries := make(repo.ChartVersions, 0)
-		entries = append(entries, indexEntries[:entryIndex]...)
-		entries = append(entries, indexEntries[entryIndex+1:]...)
-		indexYaml.Entries[chartName] = entries
-	} else {
-		return fmt.Errorf("version %s not found for chart %s in index", version.Version, chartName)
-	}
-
-	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
-	err = indexYaml.WriteFile(indexFilePath, 0644)
-
-	return err
 }
 
 // Reads in current index yaml
