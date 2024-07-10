@@ -123,6 +123,10 @@ func (p PackageList) Less(i, j int) bool {
 	return false
 }
 
+func (packageWrapper *PackageWrapper) FullName() string {
+	return packageWrapper.ParsedVendor + "/" + packageWrapper.Name
+}
+
 // Populates PackageWrapper with relevant data from upstream and
 // checks for updates. If onlyLatest is true, then it puts only the
 // latest upstream chart version in PackageWrapper.FetchVersions.
@@ -1182,18 +1186,19 @@ func listPackages(c *cli.Context) error {
 	return nil
 }
 
-// CLI function call - Appends annotaion to feature chart in Rancher UI
+// addFeaturedChart adds the "featured" annotation to a chart.
 func addFeaturedChart(c *cli.Context) error {
 	if len(c.Args()) != 2 {
 		logrus.Fatalf("Please provide the chart name and featured number (1 - %d) as arguments\n", featuredMax)
 	}
 	featuredChart := c.Args().Get(0)
-	featuredNumber, err := strconv.Atoi(c.Args().Get(1))
+	inputIndex := c.Args().Get(1)
+	featuredNumber, err := strconv.Atoi(inputIndex)
 	if err != nil {
-		logrus.Fatal(err)
+		return fmt.Errorf("failed to parse given index %q: %w", inputIndex, err)
 	}
 	if featuredNumber < 1 || featuredNumber > featuredMax {
-		logrus.Fatalf("Featured number must be between %d and %d\n", 1, featuredMax)
+		return fmt.Errorf("featured number must be between %d and %d\n", 1, featuredMax)
 	}
 
 	packageList, err := listPackageWrappers(featuredChart)
@@ -1201,29 +1206,23 @@ func addFeaturedChart(c *cli.Context) error {
 		return fmt.Errorf("failed to list packages: %w", err)
 	}
 	if len(packageList) == 0 {
-		return fmt.Errorf("package %q not available\n", featuredChart)
+		return fmt.Errorf("package %q not found", featuredChart)
 	}
+	packageWrapper := packageList[0]
 
-	packageList, err = populatePackages(featuredChart, false, false, false)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	featuredVersions := getByAnnotation(annotationFeatured, c.Args().Get(1))
-
+	featuredVersions := getByAnnotation(annotationFeatured, inputIndex)
 	if len(featuredVersions) > 0 {
 		for chartName := range featuredVersions {
 			logrus.Errorf("%s already featured at index %d\n", chartName, featuredNumber)
 		}
 	} else {
-		vendor := packageList[0].ParsedVendor
-		chartName := packageList[0].LatestStored.Name
-		err = annotate(vendor, chartName, annotationFeatured, c.Args().Get(1), false, true)
-		if err != nil {
-			logrus.Fatal(err)
+		vendor := packageWrapper.ParsedVendor
+		chartName := packageWrapper.Name
+		if err := annotate(vendor, chartName, annotationFeatured, inputIndex, false, true); err != nil {
+			return fmt.Errorf("failed to annotate %q: %w", packageWrapper.FullName(), err)
 		}
-		if err = writeIndex(); err != nil {
-			logrus.Fatalf("failed to write index: %s", err)
+		if err := writeIndex(); err != nil {
+			return fmt.Errorf("failed to write index: %w", err)
 		}
 	}
 
