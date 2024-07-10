@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -589,7 +590,7 @@ func generateChartSourceMetadata(upstreamYaml parse.UpstreamYaml) (*fetcher.Char
 func ApplyUpdates(packageWrapper PackageWrapper) error {
 	logrus.Debugf("Applying updates for package %s/%s\n", packageWrapper.ParsedVendor, packageWrapper.Name)
 
-	existingCharts, err := loadExistingCharts(packageWrapper.ParsedVendor, packageWrapper.Name)
+	existingCharts, err := loadExistingCharts(getRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -662,8 +663,11 @@ func writeCharts(packageWrapper PackageWrapper, chartWrappers []*ChartWrapper) e
 	return nil
 }
 
-func loadExistingCharts(vendor string, packageName string) ([]*ChartWrapper, error) {
-	assetsPath := filepath.Join(getRepoRoot(), repositoryAssetsDir, vendor)
+// loadExistingCharts loads the existing charts for package
+// <vendor>/<packageName> from the assets directory. It returns
+// them in a slice that is sorted by chart version, newest first.
+func loadExistingCharts(repoRoot string, vendor string, packageName string) ([]*ChartWrapper, error) {
+	assetsPath := filepath.Join(repoRoot, repositoryAssetsDir, vendor)
 	tgzFiles, err := os.ReadDir(assetsPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return []*ChartWrapper{}, nil
@@ -689,6 +693,11 @@ func loadExistingCharts(vendor string, packageName string) ([]*ChartWrapper, err
 		existingChartWrapper := NewChartWrapper(existingChart)
 		existingChartWrappers = append(existingChartWrappers, existingChartWrapper)
 	}
+	slices.SortFunc[[]*ChartWrapper, *ChartWrapper](existingChartWrappers, func(a, b *ChartWrapper) int {
+		parsedA := semver.MustParse(a.Chart.Metadata.Version)
+		parsedB := semver.MustParse(b.Chart.Metadata.Version)
+		return parsedB.Compare(parsedA)
+	})
 	return existingChartWrappers, nil
 }
 
