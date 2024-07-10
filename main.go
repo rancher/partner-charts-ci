@@ -158,11 +158,6 @@ func (packageWrapper *PackageWrapper) Populate(onlyLatest bool) (bool, error) {
 		return false, err
 	}
 
-	packageWrapper.LatestStored, err = getLatestStoredVersion(packageWrapper.Name)
-	if err != nil {
-		return false, err
-	}
-
 	if len(packageWrapper.FetchVersions) == 0 {
 		return false, nil
 	}
@@ -1002,6 +997,11 @@ func listPackageWrappers(currentPackage string) (PackageList, error) {
 			return nil, fmt.Errorf("failed to parse upstream.yaml: %w", err)
 		}
 		packageWrapper.UpstreamYaml = &upstreamYaml
+
+		packageWrapper.LatestStored, err = getLatestStoredVersion(packageWrapper.Name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get latest stored version: %w", err)
+		}
 
 		if packageWrapper.UpstreamYaml.Vendor != "" {
 			packageWrapper.Vendor = packageWrapper.UpstreamYaml.Vendor
