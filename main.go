@@ -19,6 +19,7 @@ import (
 	"github.com/rancher/partner-charts-ci/pkg/fetcher"
 	"github.com/rancher/partner-charts-ci/pkg/icons"
 	"github.com/rancher/partner-charts-ci/pkg/parse"
+	"github.com/rancher/partner-charts-ci/pkg/paths"
 	"github.com/rancher/partner-charts-ci/pkg/validate"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -203,7 +204,7 @@ func (pw PackageWrapper) GetOverlayFiles() (map[string][]byte, error) {
 }
 
 func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bool) error {
-	existingCharts, err := loadExistingCharts(getRepoRoot(), vendor, chartName)
+	existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), vendor, chartName)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -230,18 +231,8 @@ func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bo
 	return nil
 }
 
-// Fetches absolute repository root path
-func getRepoRoot() string {
-	repoRoot, err := os.Getwd()
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	return repoRoot
-}
-
 func gitCleanup() error {
-	r, err := git.PlainOpen(getRepoRoot())
+	r, err := git.PlainOpen(paths.GetRepoRoot())
 	if err != nil {
 		return err
 	}
@@ -281,7 +272,7 @@ func commitChanges(updatedList PackageList) error {
 	var additions, updates string
 	commitOptions := git.CommitOptions{}
 
-	r, err := git.PlainOpen(getRepoRoot())
+	r, err := git.PlainOpen(paths.GetRepoRoot())
 	if err != nil {
 		return err
 	}
@@ -536,7 +527,7 @@ func filterVersions(upstreamVersions repo.ChartVersions, fetch string, tracked [
 func ApplyUpdates(packageWrapper PackageWrapper) error {
 	logrus.Debugf("Applying updates for package %s/%s\n", packageWrapper.ParsedVendor, packageWrapper.Name)
 
-	existingCharts, err := loadExistingCharts(getRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name)
+	existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -584,8 +575,8 @@ func getTgzFilename(helmChart *chart.Chart) string {
 // not in chartWrappers are deleted, and charts from chartWrappers
 // that are modified or do not exist on disk are written.
 func writeCharts(vendor, chartName string, chartWrappers []*ChartWrapper) error {
-	chartsDir := filepath.Join(getRepoRoot(), repositoryChartsDir, vendor, chartName)
-	assetsDir := filepath.Join(getRepoRoot(), repositoryAssetsDir, vendor)
+	chartsDir := filepath.Join(paths.GetRepoRoot(), repositoryChartsDir, vendor, chartName)
+	assetsDir := filepath.Join(paths.GetRepoRoot(), repositoryAssetsDir, vendor)
 
 	if err := os.RemoveAll(chartsDir); err != nil {
 		return fmt.Errorf("failed to wipe existing charts directory: %w", err)
@@ -849,7 +840,7 @@ func getLatestTracked(tracked []string) *semver.Version {
 
 func getStoredVersions(chartName string) (repo.ChartVersions, error) {
 	storedVersions := repo.ChartVersions{}
-	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
+	indexFilePath := filepath.Join(paths.GetRepoRoot(), indexFile)
 	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
 	if err != nil {
 		return storedVersions, fmt.Errorf("failed to load index file: %w", err)
@@ -864,7 +855,7 @@ func getStoredVersions(chartName string) (repo.ChartVersions, error) {
 // Fetches latest stored version of chart from current index, if any
 func getLatestStoredVersion(chartName string) (repo.ChartVersion, error) {
 	latestVersion := repo.ChartVersion{}
-	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
+	indexFilePath := filepath.Join(paths.GetRepoRoot(), indexFile)
 	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
 	if err != nil {
 		return latestVersion, fmt.Errorf("failed to load index file: %w", err)
@@ -881,7 +872,7 @@ func getLatestStoredVersion(chartName string) (repo.ChartVersion, error) {
 // all repo.ChartVersions that have the specified annotation will be
 // returned, regardless of that annotation's value.
 func getByAnnotation(annotation, value string) map[string]repo.ChartVersions {
-	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
+	indexFilePath := filepath.Join(paths.GetRepoRoot(), indexFile)
 	indexYaml, err := repo.LoadIndexFile(indexFilePath)
 	if err != nil {
 		logrus.Fatalf("failed to read index.yaml: %s", err)
@@ -921,8 +912,8 @@ func getByAnnotation(annotation, value string) map[string]repo.ChartVersions {
 // index.yaml file should treat the charts' Chart.yaml files as the
 // authoritative source of chart metadata.
 func writeIndex() error {
-	indexFilePath := filepath.Join(getRepoRoot(), indexFile)
-	assetsDirectoryPath := filepath.Join(getRepoRoot(), repositoryAssetsDir)
+	indexFilePath := filepath.Join(paths.GetRepoRoot(), indexFile)
+	assetsDirectoryPath := filepath.Join(paths.GetRepoRoot(), repositoryAssetsDir)
 	newHelmIndexYaml, err := repo.IndexDirectory(assetsDirectoryPath, repositoryAssetsDir)
 	if err != nil {
 		return fmt.Errorf("failed to index assets directory: %w", err)
@@ -1147,7 +1138,7 @@ func listPackages(c *cli.Context) error {
 	}
 	vendorSorted := make([]string, 0)
 	for _, packageWrapper := range packageList {
-		packagesPath := filepath.Join(getRepoRoot(), repositoryPackagesDir)
+		packagesPath := filepath.Join(paths.GetRepoRoot(), repositoryPackagesDir)
 		packageParentPath := filepath.Dir(packageWrapper.Path)
 		packageRelativePath := filepath.Base(packageWrapper.Path)
 		if packagesPath != packageParentPath {
@@ -1326,7 +1317,7 @@ func validateRepo(c *cli.Context) {
 
 	directoryComparison := validate.DirectoryComparison{}
 
-	configYamlPath := path.Join(getRepoRoot(), configOptionsFile)
+	configYamlPath := path.Join(paths.GetRepoRoot(), configOptionsFile)
 	configYaml, err := validate.ReadConfig(configYamlPath)
 	if err != nil {
 		logrus.Fatalf("failed to read %s: %s\n", configOptionsFile, err)
@@ -1348,7 +1339,7 @@ func validateRepo(c *cli.Context) {
 
 	for dirPath := range validatePaths {
 		upstreamPath := path.Join(cloneDir, dirPath)
-		updatePath := path.Join(getRepoRoot(), dirPath)
+		updatePath := path.Join(paths.GetRepoRoot(), dirPath)
 		if _, err := os.Stat(updatePath); os.IsNotExist(err) {
 			logrus.Infof("Directory '%s' not in source. Skipping...", dirPath)
 			continue
