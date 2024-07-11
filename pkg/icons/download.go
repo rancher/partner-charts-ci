@@ -10,10 +10,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// DownloadIcon downloads the icon at iconUrl to the icon file path
-// for package packageName. If a file already exists at this path, it
-// is overwritten. Returns the path.
-func DownloadIcon(iconUrl, packageName string) (string, error) {
+// EnsureIconDownloaded downloads the icon at iconUrl to the icon file path
+// for package packageName. If a file already exists at this path, the
+// download is skipped. Returns the path to the icon.
+func EnsureIconDownloaded(iconUrl, packageName string) (string, error) {
+	if localIconPath, err := GetDownloadedIconPath(packageName); err == nil {
+		return localIconPath, nil
+	}
+
 	resp, err := http.Get(iconUrl)
 	if err != nil {
 		return "", fmt.Errorf("failed to http get %q: %w", iconUrl, err)

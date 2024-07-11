@@ -657,7 +657,7 @@ func integrateCharts(packageWrapper PackageWrapper, existingCharts, newCharts []
 		if err := addAnnotations(packageWrapper, newChart.Chart); err != nil {
 			return fmt.Errorf("failed to add annotations to chart %q version %q: %w", newChart.Name(), newChart.Metadata.Version, err)
 		}
-		if err := ensureIcon(packageWrapper, newChart.Chart); err != nil {
+		if err := ensureIcon(packageWrapper, newChart); err != nil {
 			return fmt.Errorf("failed to ensure icon for chart %q version %q: %w", newChart.Name(), newChart.Metadata.Version, err)
 		}
 		newChart.Modified = true
@@ -694,18 +694,18 @@ func applyOverlayFiles(overlayFiles map[string][]byte, helmChart *chart.Chart) e
 // directory, and that the icon URL field for helmChart refers to this local
 // icon file. We do this so that airgap installations of Rancher have access
 // to icons without needing to download them from a remote source.
-func ensureIcon(packageWrapper PackageWrapper, helmChart *chart.Chart) error {
-	if localIconUrl, err := icons.GetDownloadedIconPath(packageWrapper.Name); err == nil {
-		helmChart.Metadata.Icon = localIconUrl
-		return nil
-	}
-
-	localIconPath, err := icons.DownloadIcon(helmChart.Metadata.Icon, packageWrapper.Name)
+func ensureIcon(packageWrapper PackageWrapper, chartWrapper *ChartWrapper) error {
+	localIconPath, err := icons.EnsureIconDownloaded(chartWrapper.Metadata.Icon, packageWrapper.Name)
 	if err != nil {
-		return fmt.Errorf("failed to download icon: %w", err)
+		return fmt.Errorf("failed to ensure icon downloaded: %w", err)
 	}
 
-	helmChart.Metadata.Icon = "file://" + localIconPath
+	localIconUrl := "file://" + localIconPath
+	if chartWrapper.Metadata.Icon != localIconUrl {
+		chartWrapper.Metadata.Icon = localIconUrl
+		chartWrapper.Modified = true
+	}
+
 	return nil
 }
 
@@ -940,7 +940,7 @@ func writeIndex() error {
 			// the index.yaml. This works because Rancher uses the icon URL
 			// value from index.yaml, not the chart itself, when loading a chart's
 			// icon.
-			iconURL, err := icons.GetDownloadedIconPath(newChartVersion.Name)
+			iconPath, err := icons.GetDownloadedIconPath(newChartVersion.Name)
 			if err != nil {
 				// TODO: return an error here instead of simply logging it.
 				// Logged errors can be ignored; errors that prevent the user
@@ -949,7 +949,7 @@ func writeIndex() error {
 				// do this.
 				logrus.Errorf("failed to get downloaded icon path for chart %q version %q: %s", newChartVersion.Name, newChartVersion.Version, err)
 			} else {
-				newChartVersion.Icon = iconURL
+				newChartVersion.Icon = "file://" + iconPath
 			}
 		}
 	}
@@ -1059,32 +1059,39 @@ func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, 
 	return packageList, nil
 }
 
-// downloadIcons should only be used in a local machine by manual execution.
-// It will download all icons that contain URLs from the index.yaml file, if it is already downloaded it will keep it.
-// All downloaded icons will be saved in the assets/icons directory.
-func downloadIcons(c *cli.Context) {
+// downloadIcons ensures that:
+//  1. Each package has a valid icon in assets/icons
+//  2. Each chartVersion in index.yaml has its icon URL set to the local
+//     path of the downloaded icon
+func downloadIcons(c *cli.Context) error {
 	currentPackage := os.Getenv(packageEnvVariable)
 
-	packageList, err := populatePackages(currentPackage, false, false, false)
+	packageWrappers, err := listPackageWrappers(currentPackage)
 	if err != nil {
-		logrus.Fatal(err)
+		return fmt.Errorf("failed to list packages: %w", err)
 	}
 
-	// Convert packageList to PackageIconMap
-	var entriesPathsAndIconsMap icons.PackageIconMap = make(icons.PackageIconMap)
-	for _, pkg := range packageList {
-		entriesPathsAndIconsMap[pkg.Name] = icons.PackageIconOverride{
-			Name: pkg.Name,
-			Path: pkg.Path,
-			Icon: pkg.LatestStored.Metadata.Icon,
+	for _, packageWrapper := range packageWrappers {
+		if _, err := icons.GetDownloadedIconPath(packageWrapper.Name); err == nil {
+			continue
+		}
+		existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name)
+		if err != nil {
+			logrus.Errorf("failed to load existing charts for package %s: %s", packageWrapper.FullName(), err)
+		}
+		if len(existingCharts) == 0 {
+			logrus.Errorf("found no existing charts for package %q", packageWrapper.FullName())
+		}
+		if _, err := icons.EnsureIconDownloaded(existingCharts[0].Metadata.Icon, packageWrapper.Name); err != nil {
+			logrus.Errorf("failed to ensure icon downloaded for package %q: %s", packageWrapper.FullName(), err)
 		}
 	}
 
-	// Download all icons or retrieve the ones already downloaded
-	downloadedIcons := icons.DownloadFiles(entriesPathsAndIconsMap)
+	if err := writeIndex(); err != nil {
+		return fmt.Errorf("failed to write index: %w", err)
+	}
 
-	logrus.Infof("Finished downloading and saving icon files")
-	logrus.Infof("Downloaded %d icons", len(downloadedIcons))
+	return nil
 }
 
 // generateChanges will generate the changes for the packages based on the flags provided

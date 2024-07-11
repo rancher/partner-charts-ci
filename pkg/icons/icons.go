@@ -39,13 +39,14 @@ func ParsePackageToPackageIconOverride(name, path, icon string) PackageIconOverr
 	}
 }
 
-// GetDownloadedIconPath checks if the icon is already downloaded and return the path
+// GetDownloadedIconPath checks if the package with name packageName has
+// an icon downloaded. If so, it returns the path. Otherwise it returns
+// an error.
 func GetDownloadedIconPath(packageName string) (string, error) {
-
 	for _, ext := range extensions {
 		filePath := fmt.Sprintf("assets/icons/%s%s", packageName, ext)
 		if exist := Exists(filePath); exist {
-			return fmt.Sprintf("file://%s", filePath), nil
+			return filePath, nil
 		}
 	}
 
