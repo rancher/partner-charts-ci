@@ -979,6 +979,13 @@ func listPackageWrappers(currentPackage string) (PackageList, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to glob for packages")
 	}
+	if currentPackage != "" {
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("failed to find package %q", currentPackage)
+		} else if length := len(matches); length > 1 {
+			return nil, fmt.Errorf("found %d packages for %q, expected 1", length, currentPackage)
+		}
+	}
 
 	packageList := make(PackageList, 0, len(matches))
 	for _, match := range matches {
@@ -1180,9 +1187,6 @@ func addFeaturedChart(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
 	}
-	if len(packageList) == 0 {
-		return fmt.Errorf("package %q not found", featuredChart)
-	}
 	packageWrapper := packageList[0]
 
 	featuredVersions := getByAnnotation(annotationFeatured, inputIndex)
@@ -1214,9 +1218,6 @@ func removeFeaturedChart(c *cli.Context) error {
 	packageList, err := listPackageWrappers(featuredChart)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
-	}
-	if len(packageList) == 0 {
-		return fmt.Errorf("package %q not found", featuredChart)
 	}
 	packageWrapper := packageList[0]
 
@@ -1274,9 +1275,6 @@ func hideChart(c *cli.Context) error {
 	packageWrappers, err := listPackageWrappers(currentPackage)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
-	}
-	if len(packageWrappers) == 0 {
-		return fmt.Errorf("package %q not found", currentPackage)
 	}
 	packageWrapper := packageWrappers[0]
 
