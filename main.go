@@ -277,7 +277,7 @@ func gitCleanup() error {
 }
 
 // Commits changes to index file, assets, charts, and packages
-func commitChanges(updatedList PackageList, iconOverride bool) error {
+func commitChanges(updatedList PackageList) error {
 	var additions, updates string
 	commitOptions := git.CommitOptions{}
 
@@ -293,20 +293,15 @@ func commitChanges(updatedList PackageList, iconOverride bool) error {
 
 	logrus.Info("Committing changes")
 
+	iconsPath := filepath.Join(repositoryAssetsDir, "icons")
+	if _, err := wt.Add(iconsPath); err != nil {
+		return fmt.Errorf("failed to add %q to working tree: %w", iconsPath, err)
+	}
+
 	for _, packageWrapper := range updatedList {
-		assetsPath := path.Join(
-			repositoryAssetsDir,
-			packageWrapper.ParsedVendor)
-
-		chartsPath := path.Join(
-			repositoryChartsDir,
-			packageWrapper.ParsedVendor,
-			packageWrapper.Name)
-
-		packagesPath := path.Join(
-			repositoryPackagesDir,
-			packageWrapper.ParsedVendor,
-			packageWrapper.Name)
+		assetsPath := filepath.Join(repositoryAssetsDir, packageWrapper.ParsedVendor)
+		chartsPath := filepath.Join(repositoryChartsDir, packageWrapper.ParsedVendor, packageWrapper.Name)
+		packagesPath := filepath.Join(repositoryPackagesDir, packageWrapper.ParsedVendor, packageWrapper.Name)
 
 		for _, path := range []string{assetsPath, chartsPath, packagesPath} {
 			if _, err := wt.Add(path); err != nil {
@@ -334,9 +329,6 @@ func commitChanges(updatedList PackageList, iconOverride bool) error {
 		return fmt.Errorf("failed to add %q to working tree: %w", indexFile, err)
 	}
 	commitMessage := "Charts CI\n```"
-	if iconOverride {
-		commitMessage = "Icon Override CI\n```"
-	}
 	sort.Sort(updatedList)
 	for _, packageWrapper := range updatedList {
 		lineItem := fmt.Sprintf("  %s/%s:\n",
@@ -1154,7 +1146,7 @@ func generateChanges(auto bool) {
 	}
 
 	if auto {
-		err = commitChanges(packageList, false)
+		err = commitChanges(packageList)
 		if err != nil {
 			logrus.Fatal(err)
 		}
