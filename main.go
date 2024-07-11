@@ -1083,15 +1083,12 @@ func generateChanges(auto bool) {
 			continue
 		}
 
-		logrus.Infof("Parsed %s/%s\n", packageWrapper.ParsedVendor, packageWrapper.Name)
 		if len(packageWrapper.FetchVersions) == 0 {
-			logrus.Infof("%s (%s) is up-to-date\n",
-				packageWrapper.Vendor, packageWrapper.Name)
+			logrus.Infof("%s is up-to-date\n", packageWrapper.FullName())
 		}
 		for _, version := range packageWrapper.FetchVersions {
-			logrus.Infof("\n  Source: %s\n  Vendor: %s\n  Chart: %s\n  Version: %s\n  URL: %s  \n",
-				packageWrapper.SourceMetadata.Source, packageWrapper.Vendor, packageWrapper.Name,
-				version.Version, version.URLs[0])
+			logrus.Infof("\n  Package: %s\n  Source: %s\n  Version: %s\n  URL: %s  \n",
+				packageWrapper.SourceMetadata.Source, packageWrapper.FullName(), version.Version, version.URLs[0])
 		}
 
 		if updated {
