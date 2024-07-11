@@ -450,4 +450,28 @@ func TestMain(t *testing.T) {
 			}
 		})
 	})
+
+	t.Run("loadExistingCharts", func(t *testing.T) {
+		t.Run("should sort charts in descending chart version order", func(t *testing.T) {
+			vendor := "f5"
+			packageName := "nginx-ingress"
+			repoRoot := filepath.Join("testdata", "loadExistingCharts")
+			chartWrappers, err := loadExistingCharts(repoRoot, vendor, packageName)
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+
+			// should only parse charts with the right name
+			assert.Equal(t, len(chartWrappers), 4)
+			for _, chartWrapper := range chartWrappers {
+				assert.Equal(t, chartWrapper.Name(), "nginx-ingress")
+			}
+
+			// should sort charts properly
+			assert.Equal(t, chartWrappers[0].Metadata.Version, "1.3.1")
+			assert.Equal(t, chartWrappers[1].Metadata.Version, "1.2.0")
+			assert.Equal(t, chartWrappers[2].Metadata.Version, "1.1.3")
+			assert.Equal(t, chartWrappers[3].Metadata.Version, "1.0.2")
+		})
+	})
 }
