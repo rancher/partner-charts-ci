@@ -1059,11 +1059,11 @@ func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, 
 	return packageList, nil
 }
 
-// downloadIcons ensures that:
-//  1. Each package has a valid icon in assets/icons
+// ensureIcons ensures that:
+//  1. Each package has a valid icon file in assets/icons
 //  2. Each chartVersion in index.yaml has its icon URL set to the local
 //     path of the downloaded icon
-func downloadIcons(c *cli.Context) error {
+func ensureIcons(c *cli.Context) error {
 	currentPackage := os.Getenv(packageEnvVariable)
 
 	packageWrappers, err := listPackageWrappers(currentPackage)
@@ -1529,9 +1529,9 @@ func main() {
 			Action: validateRepo,
 		},
 		{
-			Name:   "download-icons",
-			Usage:  "Download icons from charts in index.yaml",
-			Action: downloadIcons,
+			Name:   "ensure-icons",
+			Usage:  "Ensure icons are downloaded and that chart versions in index.yaml use them",
+			Action: ensureIcons,
 		},
 		{
 			Name:      "cull",
