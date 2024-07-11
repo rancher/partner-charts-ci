@@ -1028,44 +1028,6 @@ func listPackageWrappers(currentPackage string) (PackageList, error) {
 	return packageList, nil
 }
 
-// Populates list of package wrappers, handles manual and automatic variation
-// If print, function will print information during processing
-func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, print bool) (PackageList, error) {
-	packageList := make(PackageList, 0)
-	packageWrappers, err := listPackageWrappers(currentPackage)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list packages: %w", err)
-	}
-	for _, packageWrapper := range packageWrappers {
-		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
-		updated, err := packageWrapper.Populate(onlyLatest)
-		if err != nil {
-			logrus.Error(err)
-			continue
-		}
-		if print {
-			logrus.Infof("Parsed %s/%s\n", packageWrapper.ParsedVendor, packageWrapper.Name)
-			if len(packageWrapper.FetchVersions) == 0 {
-				logrus.Infof("%s (%s) is up-to-date\n",
-					packageWrapper.Vendor, packageWrapper.Name)
-			}
-			for _, version := range packageWrapper.FetchVersions {
-				logrus.Infof("\n  Source: %s\n  Vendor: %s\n  Chart: %s\n  Version: %s\n  URL: %s  \n",
-					packageWrapper.SourceMetadata.Source, packageWrapper.Vendor, packageWrapper.Name,
-					version.Version, version.URLs[0])
-			}
-		}
-
-		if onlyUpdates && !updated {
-			continue
-		}
-
-		packageList = append(packageList, packageWrapper)
-	}
-
-	return packageList, nil
-}
-
 // ensureIcons ensures that:
 //  1. Each package has a valid icon file in assets/icons
 //  2. Each chartVersion in index.yaml has its icon URL set to the local
@@ -1107,10 +1069,34 @@ func ensureIcons(c *cli.Context) error {
 // the changes will be applied on fetchUpstreams function
 func generateChanges(auto bool) {
 	currentPackage := os.Getenv(packageEnvVariable)
-	var packageList PackageList
-	packageList, err := populatePackages(currentPackage, true, false, true)
+	packageWrappers, err := listPackageWrappers(currentPackage)
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("failed to list packages: %s", err)
+	}
+
+	packageList := make(PackageList, 0, len(packageWrappers))
+	for _, packageWrapper := range packageWrappers {
+		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
+		updated, err := packageWrapper.Populate(false)
+		if err != nil {
+			logrus.Error(err)
+			continue
+		}
+
+		logrus.Infof("Parsed %s/%s\n", packageWrapper.ParsedVendor, packageWrapper.Name)
+		if len(packageWrapper.FetchVersions) == 0 {
+			logrus.Infof("%s (%s) is up-to-date\n",
+				packageWrapper.Vendor, packageWrapper.Name)
+		}
+		for _, version := range packageWrapper.FetchVersions {
+			logrus.Infof("\n  Source: %s\n  Vendor: %s\n  Chart: %s\n  Version: %s\n  URL: %s  \n",
+				packageWrapper.SourceMetadata.Source, packageWrapper.Vendor, packageWrapper.Name,
+				version.Version, version.URLs[0])
+		}
+
+		if updated {
+			packageList = append(packageList, packageWrapper)
+		}
 	}
 
 	if len(packageList) == 0 {
