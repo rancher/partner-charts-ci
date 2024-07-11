@@ -1064,7 +1064,6 @@ func populatePackages(currentPackage string, onlyUpdates bool, onlyLatest bool, 
 // All downloaded icons will be saved in the assets/icons directory.
 func downloadIcons(c *cli.Context) {
 	currentPackage := os.Getenv(packageEnvVariable)
-	icons.CheckFilesStructure() // stop execution if file structure is not correct
 
 	packageList, err := populatePackages(currentPackage, false, false, false)
 	if err != nil {

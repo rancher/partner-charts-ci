@@ -39,20 +39,6 @@ func ParsePackageToPackageIconOverride(name, path, icon string) PackageIconOverr
 	}
 }
 
-// CheckFilesStructure will check if index.yaml and assets/icons exist
-// will log and exit if the file structure does not exist
-func CheckFilesStructure() {
-	exists := Exists(partnerFilePath)
-	if !exists {
-		fmt.Printf("File not found: %s\n", partnerFilePath)
-		logrus.Fatalf("File not found: %s\n", partnerFilePath)
-	}
-	_, err := os.Stat(partnerDownloadPath)
-	if os.IsNotExist(err) {
-		logrus.Fatalf("Directory not found: %s\n", partnerDownloadPath)
-	}
-}
-
 // GetDownloadedIconPath checks if the icon is already downloaded and return the path
 func GetDownloadedIconPath(packageName string) (string, error) {
 
