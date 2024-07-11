@@ -1288,29 +1288,33 @@ func listFeaturedCharts(c *cli.Context) {
 
 }
 
-// CLI function call - Appends annotation to hide chart in Rancher UI
-func hideChart(c *cli.Context) {
-	if len(c.Args()) < 1 {
-		logrus.Fatal("Provide package name(s) as argument")
+// hideChart ensures each released version of a package has the "hidden"
+// annotation set to "true". This hides the package in the Rancher UI.
+func hideChart(c *cli.Context) error {
+	if len(c.Args()) != 1 {
+		logrus.Fatal("Must provide exactly one package name as argument")
 	}
-	for _, currentPackage := range c.Args() {
-		packageList, err := populatePackages(currentPackage, false, false, false)
-		if err != nil {
-			logrus.Error(err)
-		}
+	currentPackage := c.Args().Get(0)
 
-		if len(packageList) == 1 {
-			vendor := packageList[0].ParsedVendor
-			chartName := packageList[0].LatestStored.Name
-			err = annotate(vendor, chartName, annotationHidden, "true", false, false)
-			if err != nil {
-				logrus.Error(err)
-			}
-			if err = writeIndex(); err != nil {
-				logrus.Fatalf("failed to write index: %s", err)
-			}
-		}
+	packageWrappers, err := listPackageWrappers(currentPackage)
+	if err != nil {
+		return fmt.Errorf("failed to list packages: %w", err)
 	}
+	if len(packageWrappers) == 0 {
+		return fmt.Errorf("package %q not found", currentPackage)
+	}
+	packageWrapper := packageWrappers[0]
+
+	vendor := packageWrapper.ParsedVendor
+	chartName := packageWrapper.Name
+	if err := annotate(vendor, chartName, annotationHidden, "true", false, false); err != nil {
+		return fmt.Errorf("failed to annotate package: %w", err)
+	}
+	if err := writeIndex(); err != nil {
+		return fmt.Errorf("failed to write index: %w", err)
+	}
+
+	return nil
 }
 
 // CLI function call - Generates all changes for available packages,
