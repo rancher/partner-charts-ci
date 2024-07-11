@@ -132,7 +132,7 @@ func (packageWrapper *PackageWrapper) FullName() string {
 // checks for updates. If onlyLatest is true, then it puts only the
 // latest upstream chart version in PackageWrapper.FetchVersions.
 // Returns true if newer package version is available.
-func (packageWrapper *PackageWrapper) Populate(onlyLatest bool) (bool, error) {
+func (packageWrapper *PackageWrapper) Populate() (bool, error) {
 	sourceMetadata, err := fetcher.FetchUpstream(*packageWrapper.UpstreamYaml)
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch data from upstream: %w", err)
@@ -141,13 +141,6 @@ func (packageWrapper *PackageWrapper) Populate(onlyLatest bool) (bool, error) {
 		logrus.Warnf("upstream name %q does not match package name %q", sourceMetadata.Versions[0].Name, packageWrapper.Name)
 	}
 	packageWrapper.SourceMetadata = &sourceMetadata
-
-	if onlyLatest {
-		packageWrapper.UpstreamYaml.Fetch = "latest"
-		if packageWrapper.UpstreamYaml.TrackVersions != nil {
-			packageWrapper.UpstreamYaml.TrackVersions = []string{packageWrapper.UpstreamYaml.TrackVersions[0]}
-		}
-	}
 
 	packageWrapper.FetchVersions, err = filterVersions(
 		packageWrapper.SourceMetadata.Versions,
@@ -1077,7 +1070,7 @@ func generateChanges(auto bool) {
 	packageList := make(PackageList, 0, len(packageWrappers))
 	for _, packageWrapper := range packageWrappers {
 		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
-		updated, err := packageWrapper.Populate(false)
+		updated, err := packageWrapper.Populate()
 		if err != nil {
 			logrus.Error(err)
 			continue
@@ -1088,7 +1081,7 @@ func generateChanges(auto bool) {
 		}
 		for _, version := range packageWrapper.FetchVersions {
 			logrus.Infof("\n  Package: %s\n  Source: %s\n  Version: %s\n  URL: %s  \n",
-				packageWrapper.SourceMetadata.Source, packageWrapper.FullName(), version.Version, version.URLs[0])
+				packageWrapper.FullName(), packageWrapper.SourceMetadata.Source, version.Version, version.URLs[0])
 		}
 
 		if updated {
