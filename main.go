@@ -1033,7 +1033,7 @@ func generateChanges(auto bool) {
 		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
 		updated, err := packageWrapper.Populate()
 		if err != nil {
-			logrus.Error(err)
+			logrus.Errorf("failed to populate %s: %s", packageWrapper.FullName(), err)
 			continue
 		}
 
