@@ -2,42 +2,16 @@ package icons
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
-	"strings"
+	"path/filepath"
 
 	"github.com/sirupsen/logrus"
-	"helm.sh/helm/v3/pkg/repo"
-)
-
-const (
-	partnerFilePath     = "index.yaml"
-	partnerDownloadPath = "assets/icons"
 )
 
 // possible extensions for the icons
 var extensions []string = []string{".png", ".jpg", ".jpeg", ".svg", ".ico"}
-
-// PackageIconOverride is a struct to hold the package name, path, and icon to override
-type PackageIconOverride struct {
-	Name string
-	Path string
-	Icon string
-}
-
-// PackageIconList is a list of PackageIconOverride
-type PackageIconList []PackageIconOverride
-
-// PackageIconMap is a map of PackageIconOverride
-type PackageIconMap map[string]PackageIconOverride
-
-// ParsePackageToPackageIconOverride will convert a Package from a PackageList to a PackageIconOverride for a PackageIconList, this will be used to override the icon in the index.yaml
-func ParsePackageToPackageIconOverride(name, path, icon string) PackageIconOverride {
-	return PackageIconOverride{
-		Name: name,
-		Path: path,
-		Icon: icon,
-	}
-}
 
 // GetDownloadedIconPath checks if the package with name packageName has
 // an icon downloaded. If so, it returns the path. Otherwise it returns
@@ -53,87 +27,78 @@ func GetDownloadedIconPath(packageName string) (string, error) {
 	return "", fmt.Errorf("no icon found for package %q", packageName)
 }
 
-// OverrideIconValues will change the metade icon URL to a local icon path for the index.yaml
-func OverrideIconValues(helmIndexYaml *repo.IndexFile, packageIconList PackageIconList) {
-	for _, pkg := range packageIconList {
-		for _, pk := range helmIndexYaml.Entries[pkg.Name] {
-			pk.Metadata.Icon = pkg.Icon
-		}
-	}
-}
-
-// ValidateIconsAndIndexYaml will if Icons and IndexYaml have matching paths
-func ValidateIconsAndIndexYaml(packageIconList PackageIconList, helmIndexFile *repo.IndexFile) error {
-	var err error
-	var scanErrors []error
-
-	for _, pkg := range packageIconList {
-		// Check if the icon has the correct path prefix
-		if !strings.HasPrefix(pkg.Icon, "file://") {
-			continue // Skip if the icon is not a local file
-		}
-		iconPath := strings.TrimPrefix(pkg.Icon, "file://")
-		// Check if icon exists in the path
-		exist := Exists(iconPath)
-		if !exist {
-			logrus.Errorf("Icon not found; icon:%s ", pkg.Icon)
-			err = fmt.Errorf("icon not found: %s", iconPath)
-			scanErrors = append(scanErrors, err)
-		}
-
-		// Check if the icon path is the same as the index.yaml
-		iconEntry := helmIndexFile.Entries[pkg.Name][0].Metadata.Icon
-		ok := iconEntry == pkg.Icon
-		if !ok {
-			logrus.Errorf("icon differ from index.yaml entry; icon: %s ; entry: %s", pkg.Icon, iconEntry)
-			err = fmt.Errorf("icon differ from index.yaml entry; icon: %s ; entry: %s", pkg.Icon, iconEntry)
-			scanErrors = append(scanErrors, err)
-		}
+// EnsureIconDownloaded downloads the icon at iconUrl to the icon file path
+// for package packageName. If a file already exists at this path, the
+// download is skipped. Returns the path to the icon.
+func EnsureIconDownloaded(iconUrl, packageName string) (string, error) {
+	if localIconPath, err := GetDownloadedIconPath(packageName); err == nil {
+		return localIconPath, nil
 	}
 
-	if len(scanErrors) > 0 {
-		logrus.Fatalf("Errors found in ValidateIconsAndIndexYaml")
-	}
-
-	// Count downloaded icons and icons entries in index yaml
-	downloadedIconFiles, err := countDownloadedIconFiles()
-	presentIconEntries := countIconEntriesInIndex(helmIndexFile)
+	resp, err := http.Get(iconUrl)
 	if err != nil {
-		logrus.Errorf("Error reading assets/icons: %v", err)
-		return err
+		return "", fmt.Errorf("failed to http get %q: %w", iconUrl, err)
 	}
-	if downloadedIconFiles != presentIconEntries {
-		logrus.Errorf("Icon files in assets/icons: %d, Icon files in index.yaml: %d", downloadedIconFiles, presentIconEntries)
-		return fmt.Errorf("icon files in assets/icons and index.yaml do not match")
-	}
-	return err
-}
+	defer resp.Body.Close()
 
-func countDownloadedIconFiles() (int, error) {
-	files, err := os.ReadDir("assets/icons")
+	ext := filepath.Ext(iconUrl)
+	if ext == "" {
+		ext = detectMIMEType(resp.Body)
+		if ext == "" {
+			return "", fmt.Errorf("failed to get file extension: %w", err)
+		}
+	}
+
+	localIconPath := filepath.Join("assets", "icons", packageName+ext)
+	destFile, err := os.Create(localIconPath)
 	if err != nil {
-		return 0, err
+		return "", fmt.Errorf("failed to create local icon file %q: %w", localIconPath, err)
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to copy response to dest file: %w", err)
 	}
 
-	count := 0
-	for _, file := range files {
-		if !file.IsDir() {
-			count++
-		}
-	}
-
-	return count, nil
+	return localIconPath, nil
 }
 
-func countIconEntriesInIndex(helmIndexFile *repo.IndexFile) int {
-	var counter int
-	for _, entry := range helmIndexFile.Entries {
-		icon := entry[0].Metadata.Icon
-		if strings.HasPrefix(icon, "file://") {
-			counter++
-		} else {
-			logrus.Warnf("Icon %s of entry %s is not a local file", icon, entry[0].Name)
-		}
+// Exists checks if the file already exists
+func Exists(filePath string) bool {
+	_, err := os.Stat(filePath)
+	if os.IsNotExist(err) {
+		return false // File do not exist
+	} else if err == nil {
+		return true // File exists
 	}
-	return counter
+
+	logrus.Errorf("Error checking file: %s - error: %v", filePath, err)
+	return false // File might not exist
+}
+
+func detectMIMEType(body io.ReadCloser) string {
+	buffer := make([]byte, 512)
+	_, err := body.Read(buffer)
+	if err != nil {
+		return ""
+	}
+
+	fileType := ""
+	mimeType := http.DetectContentType(buffer)
+	switch mimeType {
+	case "image/jpeg":
+		fileType = ".jpg"
+	case "image/png":
+		fileType = ".png"
+	case "image/gif":
+		fileType = ".gif"
+	case "image/svg+xml":
+		fileType = ".svg"
+	default:
+		fileType = ""
+		logrus.Errorf("Unknown file type: %s", mimeType)
+
+	}
+	return fileType
 }
