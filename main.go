@@ -91,8 +91,6 @@ type PackageWrapper struct {
 	FetchVersions repo.ChartVersions
 	// Path stores the package path in current repository
 	Path string
-	// LatestStored stores the latest version of the chart currently in the repo
-	LatestStored repo.ChartVersion
 	// SourceMetadata represents metadata fetched from the upstream repository
 	SourceMetadata *fetcher.ChartSourceMetadata
 	// The package's upstream.yaml file
@@ -257,7 +255,6 @@ func gitCleanup() error {
 
 // Commits changes to index file, assets, charts, and packages
 func commitChanges(updatedList PackageList) error {
-	var additions, updates string
 	commitOptions := git.CommitOptions{}
 
 	r, err := git.PlainOpen(paths.GetRepoRoot())
@@ -307,30 +304,14 @@ func commitChanges(updatedList PackageList) error {
 	if _, err := wt.Add(indexFile); err != nil {
 		return fmt.Errorf("failed to add %q to working tree: %w", indexFile, err)
 	}
-	commitMessage := "Charts CI\n```"
+	commitMessage := "Added chart versions:\n"
 	sort.Sort(updatedList)
 	for _, packageWrapper := range updatedList {
-		lineItem := fmt.Sprintf("  %s/%s:\n",
-			packageWrapper.ParsedVendor,
-			packageWrapper.Name)
+		commitMessage += fmt.Sprintf("  %s:\n", packageWrapper.FullName())
 		for _, version := range packageWrapper.FetchVersions {
-			lineItem += fmt.Sprintf("    - %s\n", version.Version)
-		}
-		if packageWrapper.LatestStored.Digest == "" {
-			additions += lineItem
-		} else {
-			updates += lineItem
+			commitMessage += fmt.Sprintf("    - %s\n", version.Version)
 		}
 	}
-
-	if additions != "" {
-		commitMessage += fmt.Sprintf("\nAdded:\n%s", additions)
-	}
-	if updates != "" {
-		commitMessage += fmt.Sprintf("\nUpdated:\n%s", updates)
-	}
-
-	commitMessage += "```"
 
 	_, err = wt.Commit(commitMessage, &commitOptions)
 	if err != nil {
@@ -840,21 +821,6 @@ func getStoredVersions(chartName string) (repo.ChartVersions, error) {
 	return storedVersions, nil
 }
 
-// Fetches latest stored version of chart from current index, if any
-func getLatestStoredVersion(chartName string) (repo.ChartVersion, error) {
-	latestVersion := repo.ChartVersion{}
-	indexFilePath := filepath.Join(paths.GetRepoRoot(), indexFile)
-	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
-	if err != nil {
-		return latestVersion, fmt.Errorf("failed to load index file: %w", err)
-	}
-	if val, ok := helmIndexYaml.Entries[chartName]; ok {
-		latestVersion = *val[0]
-	}
-
-	return latestVersion, nil
-}
-
 // getByAnnotation gets all repo.ChartVersions from index.yaml that have
 // the specified annotation with the specified value. If value is "",
 // all repo.ChartVersions that have the specified annotation will be
@@ -997,11 +963,6 @@ func listPackageWrappers(currentPackage string) (PackageList, error) {
 			return nil, fmt.Errorf("failed to parse upstream.yaml: %w", err)
 		}
 		packageWrapper.UpstreamYaml = &upstreamYaml
-
-		packageWrapper.LatestStored, err = getLatestStoredVersion(packageWrapper.Name)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get latest stored version: %w", err)
-		}
 
 		if packageWrapper.UpstreamYaml.Vendor != "" {
 			packageWrapper.Vendor = packageWrapper.UpstreamYaml.Vendor
