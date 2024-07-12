@@ -11,13 +11,13 @@ import (
 )
 
 // possible extensions for the icons
-var extensions []string = []string{".png", ".jpg", ".jpeg", ".svg", ".ico"}
+var validExtensions []string = []string{".png", ".jpg", ".jpeg", ".svg", ".ico"}
 
 // GetDownloadedIconPath checks if the package with name packageName has
 // an icon downloaded. If so, it returns the path. Otherwise it returns
 // an error.
 func GetDownloadedIconPath(packageName string) (string, error) {
-	for _, ext := range extensions {
+	for _, ext := range validExtensions {
 		filePath := fmt.Sprintf("assets/icons/%s%s", packageName, ext)
 		if exist := Exists(filePath); exist {
 			return filePath, nil
