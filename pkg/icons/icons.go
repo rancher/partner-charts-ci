@@ -43,7 +43,7 @@ func EnsureIconDownloaded(iconUrl, packageName string) (string, error) {
 
 	ext := filepath.Ext(iconUrl)
 	if ext == "" {
-		ext = detectMIMEType(resp.Body)
+		ext = getExtension(resp.Body)
 		if ext == "" {
 			return "", fmt.Errorf("failed to get file extension: %w", err)
 		}
@@ -77,7 +77,7 @@ func Exists(filePath string) bool {
 	return false // File might not exist
 }
 
-func detectMIMEType(body io.ReadCloser) string {
+func getExtension(body io.ReadCloser) string {
 	buffer := make([]byte, 512)
 	_, err := body.Read(buffer)
 	if err != nil {
