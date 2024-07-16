@@ -40,25 +40,26 @@ func EnsureIconDownloaded(iconUrl, packageName string) (string, error) {
 		return "", fmt.Errorf("failed to http get %q: %w", iconUrl, err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("got non-2xx status code on response: %s", resp.Status)
+	}
+
+	contents, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
 
 	ext := filepath.Ext(iconUrl)
 	if ext == "" {
-		ext = detectMIMEType(resp.Body)
-		if ext == "" {
+		ext, err = getExtension(contents)
+		if err != nil {
 			return "", fmt.Errorf("failed to get file extension: %w", err)
 		}
 	}
 
 	localIconPath := filepath.Join("assets", "icons", packageName+ext)
-	destFile, err := os.Create(localIconPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to create local icon file %q: %w", localIconPath, err)
-	}
-	defer destFile.Close()
-
-	_, err = io.Copy(destFile, resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to copy response to dest file: %w", err)
+	if err := os.WriteFile(localIconPath, contents, 0o644); err != nil {
+		return "", fmt.Errorf("failed to write response to file: %w", err)
 	}
 
 	return localIconPath, nil
@@ -77,28 +78,17 @@ func Exists(filePath string) bool {
 	return false // File might not exist
 }
 
-func detectMIMEType(body io.ReadCloser) string {
-	buffer := make([]byte, 512)
-	_, err := body.Read(buffer)
-	if err != nil {
-		return ""
-	}
-
-	fileType := ""
-	mimeType := http.DetectContentType(buffer)
+func getExtension(data []byte) (string, error) {
+	mimeType := http.DetectContentType(data)
 	switch mimeType {
 	case "image/jpeg":
-		fileType = ".jpg"
+		return ".jpg", nil
 	case "image/png":
-		fileType = ".png"
+		return ".png", nil
 	case "image/gif":
-		fileType = ".gif"
+		return ".gif", nil
 	case "image/svg+xml":
-		fileType = ".svg"
-	default:
-		fileType = ""
-		logrus.Errorf("Unknown file type: %s", mimeType)
-
+		return ".svg", nil
 	}
-	return fileType
+	return "", fmt.Errorf("unknown file type %q", mimeType)
 }
