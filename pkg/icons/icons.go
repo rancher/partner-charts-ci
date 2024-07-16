@@ -40,6 +40,9 @@ func EnsureIconDownloaded(iconUrl, packageName string) (string, error) {
 		return "", fmt.Errorf("failed to http get %q: %w", iconUrl, err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("got non-2xx status code on response: %s", resp.Status)
+	}
 
 	contents, err := io.ReadAll(resp.Body)
 	if err != nil {
