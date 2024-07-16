@@ -127,9 +127,8 @@ func (packageWrapper *PackageWrapper) FullName() string {
 }
 
 // Populates PackageWrapper with relevant data from upstream and
-// checks for updates. If onlyLatest is true, then it puts only the
-// latest upstream chart version in PackageWrapper.FetchVersions.
-// Returns true if newer package version is available.
+// checks for updates. Returns true if newer package version is
+// available.
 func (packageWrapper *PackageWrapper) Populate() (bool, error) {
 	sourceMetadata, err := fetcher.FetchUpstream(*packageWrapper.UpstreamYaml)
 	if err != nil {
