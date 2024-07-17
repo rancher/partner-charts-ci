@@ -474,4 +474,149 @@ func TestMain(t *testing.T) {
 			assert.Equal(t, chartWrappers[3].Metadata.Version, "1.0.2")
 		})
 	})
+
+	t.Run("writeCharts", func(t *testing.T) {
+		t.Run("should add charts that do not exist on disk", func(t *testing.T) {
+			vendor := "testVendor"
+			chartName := "testChart"
+			newCharts := []*ChartWrapper{
+				{
+					Chart: &chart.Chart{
+						Metadata: &chart.Metadata{
+							APIVersion: "v2",
+							Name:       chartName,
+							Version:    "2.3.4",
+						},
+					},
+				},
+				{
+					Chart: &chart.Chart{
+						Metadata: &chart.Metadata{
+							APIVersion: "v2",
+							Name:       chartName,
+							Version:    "1.2.3",
+						},
+					},
+				},
+			}
+			repoRoot := t.TempDir()
+			if err := writeCharts(repoRoot, vendor, chartName, newCharts); err != nil {
+				t.Fatalf("unexpected error in writeCharts: %s", err)
+			}
+			chartsFromDisk, err := loadExistingCharts(repoRoot, vendor, chartName)
+			if err != nil {
+				t.Fatalf("unexpected error in loadExistingCharts: %s", err)
+			}
+			assert.Equal(t, len(newCharts), len(chartsFromDisk))
+			for index := range newCharts {
+				assert.Equal(t, newCharts[index].Metadata, chartsFromDisk[index].Metadata)
+			}
+		})
+
+		t.Run("should delete charts that are present on disk but not passed in", func(t *testing.T) {
+			vendor := "testVendor"
+			chartName := "testChart"
+			newCharts := []*ChartWrapper{
+				{
+					Chart: &chart.Chart{
+						Metadata: &chart.Metadata{
+							APIVersion: "v2",
+							Name:       chartName,
+							Version:    "3.4.5",
+						},
+					},
+				},
+				{
+					Chart: &chart.Chart{
+						Metadata: &chart.Metadata{
+							APIVersion: "v2",
+							Name:       chartName,
+							Version:    "2.3.4",
+						},
+					},
+				},
+				{
+					Chart: &chart.Chart{
+						Metadata: &chart.Metadata{
+							APIVersion: "v2",
+							Name:       chartName,
+							Version:    "1.2.3",
+						},
+					},
+				},
+			}
+			repoRoot := t.TempDir()
+			if err := writeCharts(repoRoot, vendor, chartName, newCharts); err != nil {
+				t.Fatalf("unexpected error in first writeCharts call: %s", err)
+			}
+			if err := writeCharts(repoRoot, vendor, chartName, newCharts[0:2]); err != nil {
+				t.Fatalf("unexpected error in second writeCharts call: %s", err)
+			}
+			chartsFromDisk, err := loadExistingCharts(repoRoot, vendor, chartName)
+			if err != nil {
+				t.Fatalf("unexpected error in loadExistingCharts: %s", err)
+			}
+			assert.Equal(t, 2, len(chartsFromDisk))
+			for index := range chartsFromDisk {
+				assert.Equal(t, newCharts[index].Metadata, chartsFromDisk[index].Metadata)
+			}
+		})
+
+		t.Run("should modify charts only when PackageWrapper.Modified is true", func(t *testing.T) {
+			vendor := "testVendor"
+			chartName := "testChart"
+			annotationKey := "testAnnotation"
+			annotationValue := "testAnnotationValue"
+			newCharts := []*ChartWrapper{
+				{
+					Chart: &chart.Chart{
+						Metadata: &chart.Metadata{
+							APIVersion: "v2",
+							Name:       chartName,
+							Version:    "2.3.4",
+						},
+					},
+				},
+				{
+					Chart: &chart.Chart{
+						Metadata: &chart.Metadata{
+							APIVersion: "v2",
+							Name:       chartName,
+							Version:    "1.2.3",
+						},
+					},
+				},
+			}
+			repoRoot := t.TempDir()
+			if err := writeCharts(repoRoot, vendor, chartName, newCharts); err != nil {
+				t.Fatalf("unexpected error in first call of writeCharts: %s", err)
+			}
+			chartsFromDisk, err := loadExistingCharts(repoRoot, vendor, chartName)
+			if err != nil {
+				t.Fatalf("unexpected error in first call of loadExistingCharts: %s", err)
+			}
+
+			// add annotation to both charts, but set Modified only on first chart
+			for _, chartFromDisk := range chartsFromDisk {
+				chartFromDisk.Metadata.Annotations = map[string]string{
+					annotationKey: annotationValue,
+				}
+			}
+			chartsFromDisk[0].Modified = true
+
+			if err := writeCharts(repoRoot, vendor, chartName, chartsFromDisk); err != nil {
+				t.Fatalf("unexpected error in second call of writeCharts: %s", err)
+			}
+			newChartsFromDisk, err := loadExistingCharts(repoRoot, vendor, chartName)
+			if err != nil {
+				t.Fatalf("unexpected error in second call of loadExistingCharts: %s", err)
+			}
+
+			assert.Equal(t, len(newCharts), len(newChartsFromDisk))
+			value, ok := newChartsFromDisk[0].Metadata.Annotations[annotationKey]
+			assert.True(t, ok)
+			assert.Equal(t, annotationValue, value)
+			assert.Nil(t, newChartsFromDisk[1].Metadata.Annotations)
+		})
+	})
 }
