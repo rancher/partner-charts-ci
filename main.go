@@ -209,7 +209,7 @@ func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bo
 		}
 	}
 
-	if err := writeCharts(vendor, chartName, existingCharts); err != nil {
+	if err := writeCharts(paths.GetRepoRoot(), vendor, chartName, existingCharts); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
@@ -524,7 +524,7 @@ func ApplyUpdates(packageWrapper PackageWrapper) error {
 	allCharts := make([]*ChartWrapper, 0, len(existingCharts)+len(newCharts))
 	allCharts = append(allCharts, existingCharts...)
 	allCharts = append(allCharts, newCharts...)
-	if err := writeCharts(packageWrapper.ParsedVendor, packageWrapper.Name, allCharts); err != nil {
+	if err := writeCharts(paths.GetRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name, allCharts); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
@@ -542,9 +542,9 @@ func getTgzFilename(helmChart *chart.Chart) string {
 // packages passed in chartWrappers. In other words, charts that are
 // not in chartWrappers are deleted, and charts from chartWrappers
 // that are modified or do not exist on disk are written.
-func writeCharts(vendor, chartName string, chartWrappers []*ChartWrapper) error {
-	chartsDir := filepath.Join(paths.GetRepoRoot(), repositoryChartsDir, vendor, chartName)
-	assetsDir := filepath.Join(paths.GetRepoRoot(), repositoryAssetsDir, vendor)
+func writeCharts(repoRoot, vendor, chartName string, chartWrappers []*ChartWrapper) error {
+	chartsDir := filepath.Join(repoRoot, repositoryChartsDir, vendor, chartName)
+	assetsDir := filepath.Join(repoRoot, repositoryAssetsDir, vendor)
 
 	if err := os.RemoveAll(chartsDir); err != nil {
 		return fmt.Errorf("failed to wipe existing charts directory: %w", err)
