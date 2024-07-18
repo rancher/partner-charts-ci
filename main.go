@@ -550,6 +550,26 @@ func writeCharts(repoRoot, vendor, chartName string, chartWrappers []*ChartWrapp
 		return fmt.Errorf("failed to wipe existing charts directory: %w", err)
 	}
 
+	// delete any charts on disk that are not in chartWrappers
+	existingCharts, err := loadExistingCharts(repoRoot, vendor, chartName)
+	if err != nil {
+		return fmt.Errorf("failed to load existing charts: %w", err)
+	}
+	versionToChartWrapper := map[string]*ChartWrapper{}
+	for _, chartWrapper := range chartWrappers {
+		versionToChartWrapper[chartWrapper.Metadata.Version] = chartWrapper
+	}
+	for _, existingChart := range existingCharts {
+		if _, ok := versionToChartWrapper[existingChart.Metadata.Version]; !ok {
+			assetFilename := getTgzFilename(existingChart.Chart)
+			assetPath := filepath.Join(assetsDir, assetFilename)
+			if err := os.RemoveAll(assetPath); err != nil {
+				return fmt.Errorf("failed to remove %q: %w", assetFilename, err)
+			}
+		}
+	}
+
+	// create or update existing charts
 	for _, chartWrapper := range chartWrappers {
 		assetsFilename := getTgzFilename(chartWrapper.Chart)
 		assetsPath := filepath.Join(assetsDir, assetsFilename)
