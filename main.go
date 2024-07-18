@@ -127,9 +127,8 @@ func (packageWrapper *PackageWrapper) FullName() string {
 }
 
 // Populates PackageWrapper with relevant data from upstream and
-// checks for updates. If onlyLatest is true, then it puts only the
-// latest upstream chart version in PackageWrapper.FetchVersions.
-// Returns true if newer package version is available.
+// checks for updates. Returns true if newer package version is
+// available.
 func (packageWrapper *PackageWrapper) Populate() (bool, error) {
 	sourceMetadata, err := fetcher.FetchUpstream(*packageWrapper.UpstreamYaml)
 	if err != nil {
@@ -210,7 +209,7 @@ func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bo
 		}
 	}
 
-	if err := writeCharts(vendor, chartName, existingCharts); err != nil {
+	if err := writeCharts(paths.GetRepoRoot(), vendor, chartName, existingCharts); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
@@ -525,7 +524,7 @@ func ApplyUpdates(packageWrapper PackageWrapper) error {
 	allCharts := make([]*ChartWrapper, 0, len(existingCharts)+len(newCharts))
 	allCharts = append(allCharts, existingCharts...)
 	allCharts = append(allCharts, newCharts...)
-	if err := writeCharts(packageWrapper.ParsedVendor, packageWrapper.Name, allCharts); err != nil {
+	if err := writeCharts(paths.GetRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name, allCharts); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
@@ -543,14 +542,34 @@ func getTgzFilename(helmChart *chart.Chart) string {
 // packages passed in chartWrappers. In other words, charts that are
 // not in chartWrappers are deleted, and charts from chartWrappers
 // that are modified or do not exist on disk are written.
-func writeCharts(vendor, chartName string, chartWrappers []*ChartWrapper) error {
-	chartsDir := filepath.Join(paths.GetRepoRoot(), repositoryChartsDir, vendor, chartName)
-	assetsDir := filepath.Join(paths.GetRepoRoot(), repositoryAssetsDir, vendor)
+func writeCharts(repoRoot, vendor, chartName string, chartWrappers []*ChartWrapper) error {
+	chartsDir := filepath.Join(repoRoot, repositoryChartsDir, vendor, chartName)
+	assetsDir := filepath.Join(repoRoot, repositoryAssetsDir, vendor)
 
 	if err := os.RemoveAll(chartsDir); err != nil {
 		return fmt.Errorf("failed to wipe existing charts directory: %w", err)
 	}
 
+	// delete any charts on disk that are not in chartWrappers
+	existingCharts, err := loadExistingCharts(repoRoot, vendor, chartName)
+	if err != nil {
+		return fmt.Errorf("failed to load existing charts: %w", err)
+	}
+	versionToChartWrapper := map[string]*ChartWrapper{}
+	for _, chartWrapper := range chartWrappers {
+		versionToChartWrapper[chartWrapper.Metadata.Version] = chartWrapper
+	}
+	for _, existingChart := range existingCharts {
+		if _, ok := versionToChartWrapper[existingChart.Metadata.Version]; !ok {
+			assetFilename := getTgzFilename(existingChart.Chart)
+			assetPath := filepath.Join(assetsDir, assetFilename)
+			if err := os.RemoveAll(assetPath); err != nil {
+				return fmt.Errorf("failed to remove %q: %w", assetFilename, err)
+			}
+		}
+	}
+
+	// create or update existing charts
 	for _, chartWrapper := range chartWrappers {
 		assetsFilename := getTgzFilename(chartWrapper.Chart)
 		assetsPath := filepath.Join(assetsDir, assetsFilename)
@@ -1346,59 +1365,99 @@ func validateRepo(c *cli.Context) {
 
 }
 
+// cullCharts removes chart versions that are older than the passed number of
+// days. Like many other subcommands, the PACKAGE environment variable can be
+// used to work on a single package.
 func cullCharts(c *cli.Context) error {
-	// get the name of the chart to work on
-	chartName := c.Args().Get(0)
+	currentPackage := os.Getenv(packageEnvVariable)
+	packageWrappers, err := listPackageWrappers(currentPackage)
+	if err != nil {
+		return fmt.Errorf("failed to list packages: %w", err)
+	}
 
 	// parse days argument
-	rawDays := c.Args().Get(1)
+	rawDays := c.Args().Get(0)
 	daysInt64, err := strconv.ParseInt(rawDays, 10, strconv.IntSize)
 	if err != nil {
 		return fmt.Errorf("failed to convert %q to integer: %w", rawDays, err)
 	}
 	days := int(daysInt64)
 
-	// parse index.yaml
-	index, err := repo.LoadIndexFile(indexFile)
+	_, newerChartVersions, err := getOlderAndNewerChartVersions(days)
 	if err != nil {
-		return fmt.Errorf("failed to read index file: %w", err)
+		return fmt.Errorf("failed to get older and newer chart versions: %w", err)
 	}
 
-	// try to find subjectPackage in index.yaml
-	packageVersions, ok := index.Entries[chartName]
-	if !ok {
-		return fmt.Errorf("chart %q not present in %s", chartName, indexFile)
-	}
+	skippedPackages := make([]string, 0, len(packageWrappers))
+	for _, packageWrapper := range packageWrappers {
+		logrus.Infof("culling %s", packageWrapper.FullName())
+		existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name)
+		if err != nil {
+			logrus.Errorf("failed to load existing charts for %q: %s", packageWrapper.FullName(), err)
+			skippedPackages = append(skippedPackages, packageWrapper.FullName())
+			continue
+		}
 
-	// get charts that are newer and older than cutoff
-	now := time.Now()
-	cutoff := now.AddDate(0, 0, -days)
-	olderPackageVersions := make(repo.ChartVersions, 0, len(packageVersions))
-	newerPackageVersions := make(repo.ChartVersions, 0, len(packageVersions))
-	for _, packageVersion := range packageVersions {
-		if packageVersion.Created.After(cutoff) {
-			newerPackageVersions = append(newerPackageVersions, packageVersion)
-		} else {
-			olderPackageVersions = append(olderPackageVersions, packageVersion)
+		keptCharts := make([]*ChartWrapper, 0, len(existingCharts))
+		for _, existingChart := range existingCharts {
+			if slices.Contains(newerChartVersions[packageWrapper.Name], existingChart.Metadata.Version) {
+				keptCharts = append(keptCharts, existingChart)
+			}
+		}
+		if len(keptCharts) == 0 {
+			logrus.Errorf("no versions of %s would remain; skipping...",
+				packageWrapper.FullName())
+			skippedPackages = append(skippedPackages, packageWrapper.FullName())
+			continue
+		}
+
+		if err := writeCharts(paths.GetRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name, keptCharts); err != nil {
+			logrus.Errorf("failed to write charts for %q: %s", packageWrapper.FullName(), err)
+			skippedPackages = append(skippedPackages, packageWrapper.FullName())
+			continue
 		}
 	}
 
-	// remove old charts from assets directory
-	for _, olderPackageVersion := range olderPackageVersions {
-		for _, url := range olderPackageVersion.URLs {
-			if err := os.Remove(url); err != nil {
-				return fmt.Errorf("failed to remove %q: %w", url, err)
+	if len(skippedPackages) > 0 {
+		logrus.Errorf("skipped due to error:\n%s", strings.Join(skippedPackages, "\n"))
+	}
+	if len(skippedPackages) == len(packageWrappers) {
+		logrus.Fatal("all packages skipped")
+	}
+
+	if err := writeIndex(); err != nil {
+		return fmt.Errorf("failed to write index: %w", err)
+	}
+
+	return nil
+}
+
+// getOlderAndNewerChartVersions splits the chartVersions in
+// index.yaml into two groups: one that is more than days days old,
+// and one that is less than days days old. They are returned as maps
+// of chart name to slices of versions, one version per chartVersion.
+// The older versions are the first return value and the newer
+// versions are the second return value.
+func getOlderAndNewerChartVersions(days int) (map[string][]string, map[string][]string, error) {
+	indexYaml, err := repo.LoadIndexFile(indexFile)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read index file: %w", err)
+	}
+
+	cutoff := time.Now().AddDate(0, 0, -days)
+	olderVersions := make(map[string][]string)
+	newerVersions := make(map[string][]string)
+	for chartName, chartVersions := range indexYaml.Entries {
+		for _, chartVersion := range chartVersions {
+			if chartVersion.Created.After(cutoff) {
+				newerVersions[chartName] = append(newerVersions[chartName], chartVersion.Version)
+			} else {
+				olderVersions[chartName] = append(olderVersions[chartName], chartVersion.Version)
 			}
 		}
 	}
 
-	// modify index.yaml
-	index.Entries[chartName] = newerPackageVersions
-	if err := index.WriteFile(indexFile, 0o644); err != nil {
-		return fmt.Errorf("failed to write index file: %w", err)
-	}
-
-	return nil
+	return olderVersions, newerVersions, nil
 }
 
 func main() {
@@ -1470,9 +1529,9 @@ func main() {
 		},
 		{
 			Name:      "cull",
-			Usage:     "Remove versions of chart older than a number of days",
+			Usage:     "Remove versions of charts older than a number of days",
 			Action:    cullCharts,
-			ArgsUsage: "<chart> <days>",
+			ArgsUsage: "<days>",
 		},
 	}
 
