@@ -129,17 +129,6 @@ func ApplyChartAnnotations(helmChart *chart.Chart, annotations map[string]string
 
 }
 
-func RemoveChartAnnotations(helmChart *chart.Chart, annotations map[string]string) bool {
-	modified := false
-	for annotation, value := range annotations {
-		if DeannotateChart(helmChart, annotation, value) {
-			modified = true
-		}
-	}
-
-	return modified
-}
-
 func StripPackageVersion(chartVersion string) string {
 	version, err := semver.NewVersion(chartVersion)
 	if err != nil {

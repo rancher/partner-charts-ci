@@ -3,7 +3,6 @@ package parse
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 
@@ -37,38 +36,6 @@ type UpstreamYaml struct {
 	TrackVersions      []string       `json:"TrackVersions"`
 	ReleaseName        string         `json:"ReleaseName"`
 	Vendor             string         `json:"Vendor"`
-}
-
-func ListPackages(packageDirectory string, currentPackage string) (map[string]string, error) {
-	packageList := make(map[string]string)
-	var searchDirectory string
-
-	if currentPackage != "" {
-		searchDirectory = filepath.Join(packageDirectory, currentPackage)
-	} else {
-		searchDirectory = packageDirectory
-	}
-
-	if _, err := os.Stat(searchDirectory); os.IsNotExist(err) {
-		return packageList, err
-	}
-
-	findPackage := func(filePath string, info os.FileInfo, err error) error {
-		if err != nil {
-			logrus.Error(err)
-		}
-
-		if !info.IsDir() && info.Name() == UpstreamOptionsFile {
-			packagePath := filepath.Dir(filePath)
-			packageName := strings.TrimPrefix(packagePath, packageDirectory)
-			packageName = strings.TrimPrefix(packageName, "/")
-			packageList[packageName] = packagePath
-		}
-
-		return nil
-	}
-
-	return packageList, filepath.Walk(searchDirectory, findPackage)
 }
 
 func ParseUpstreamYaml(packagePath string) (UpstreamYaml, error) {
