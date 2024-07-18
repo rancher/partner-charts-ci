@@ -1365,6 +1365,9 @@ func validateRepo(c *cli.Context) {
 
 }
 
+// cullCharts removes chart versions that are older than the passed number of
+// days. Like many other subcommands, the PACKAGE environment variable can be
+// used to work on a single package.
 func cullCharts(c *cli.Context) error {
 	currentPackage := os.Getenv(packageEnvVariable)
 	packageWrappers, err := listPackageWrappers(currentPackage)
