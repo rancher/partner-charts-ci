@@ -98,7 +98,7 @@ type PackageWrapper struct {
 	// The user-facing (i.e. pretty) chart vendor name
 	DisplayVendor string
 	// The developer-facing chart vendor name
-	ParsedVendor string
+	Vendor string
 }
 
 type PackageList []PackageWrapper
@@ -113,8 +113,8 @@ func (p PackageList) Swap(i, j int) {
 
 func (p PackageList) Less(i, j int) bool {
 	if p[i].SourceMetadata != nil && p[j].SourceMetadata != nil {
-		if p[i].ParsedVendor != p[j].ParsedVendor {
-			return p[i].ParsedVendor < p[j].ParsedVendor
+		if p[i].Vendor != p[j].Vendor {
+			return p[i].Vendor < p[j].Vendor
 		}
 		return p[i].Name < p[j].Name
 	}
@@ -123,7 +123,7 @@ func (p PackageList) Less(i, j int) bool {
 }
 
 func (packageWrapper *PackageWrapper) FullName() string {
-	return packageWrapper.ParsedVendor + "/" + packageWrapper.Name
+	return packageWrapper.Vendor + "/" + packageWrapper.Name
 }
 
 // Populates PackageWrapper with relevant data from upstream and
@@ -274,9 +274,9 @@ func commitChanges(updatedList PackageList) error {
 	}
 
 	for _, packageWrapper := range updatedList {
-		assetsPath := filepath.Join(repositoryAssetsDir, packageWrapper.ParsedVendor)
-		chartsPath := filepath.Join(repositoryChartsDir, packageWrapper.ParsedVendor, packageWrapper.Name)
-		packagesPath := filepath.Join(repositoryPackagesDir, packageWrapper.ParsedVendor, packageWrapper.Name)
+		assetsPath := filepath.Join(repositoryAssetsDir, packageWrapper.Vendor)
+		chartsPath := filepath.Join(repositoryChartsDir, packageWrapper.Vendor, packageWrapper.Name)
+		packagesPath := filepath.Join(repositoryPackagesDir, packageWrapper.Vendor, packageWrapper.Name)
 
 		for _, path := range []string{assetsPath, chartsPath, packagesPath} {
 			if _, err := wt.Add(path); err != nil {
@@ -493,9 +493,9 @@ func filterVersions(upstreamVersions repo.ChartVersions, fetch string, tracked [
 }
 
 func ApplyUpdates(packageWrapper PackageWrapper) error {
-	logrus.Debugf("Applying updates for package %s/%s\n", packageWrapper.ParsedVendor, packageWrapper.Name)
+	logrus.Debugf("Applying updates for package %s/%s\n", packageWrapper.Vendor, packageWrapper.Name)
 
-	existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name)
+	existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -524,7 +524,7 @@ func ApplyUpdates(packageWrapper PackageWrapper) error {
 	allCharts := make([]*ChartWrapper, 0, len(existingCharts)+len(newCharts))
 	allCharts = append(allCharts, existingCharts...)
 	allCharts = append(allCharts, newCharts...)
-	if err := writeCharts(paths.GetRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name, allCharts); err != nil {
+	if err := writeCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, allCharts); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
@@ -972,9 +972,9 @@ func listPackageWrappers(currentPackage string) (PackageList, error) {
 			return nil, fmt.Errorf("failed to split %q into 3 parts", match)
 		}
 		packageWrapper := PackageWrapper{
-			Path:         match,
-			ParsedVendor: parts[1],
-			Name:         parts[2],
+			Path:   match,
+			Vendor: parts[1],
+			Name:   parts[2],
 		}
 
 		upstreamYaml, err := parse.ParseUpstreamYaml(packageWrapper.Path)
@@ -986,7 +986,7 @@ func listPackageWrappers(currentPackage string) (PackageList, error) {
 		if packageWrapper.UpstreamYaml.Vendor != "" {
 			packageWrapper.DisplayVendor = packageWrapper.UpstreamYaml.Vendor
 		} else {
-			packageWrapper.DisplayVendor = packageWrapper.ParsedVendor
+			packageWrapper.DisplayVendor = packageWrapper.Vendor
 		}
 
 		if packageWrapper.UpstreamYaml.DisplayName != "" {
@@ -1017,7 +1017,7 @@ func ensureIcons(c *cli.Context) error {
 		if _, err := icons.GetDownloadedIconPath(packageWrapper.Name); err == nil {
 			continue
 		}
-		existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name)
+		existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
 		if err != nil {
 			logrus.Errorf("failed to load existing charts for package %s: %s", packageWrapper.FullName(), err)
 		}
@@ -1151,7 +1151,7 @@ func addFeaturedChart(c *cli.Context) error {
 			logrus.Errorf("%s already featured at index %d\n", chartName, featuredNumber)
 		}
 	} else {
-		vendor := packageWrapper.ParsedVendor
+		vendor := packageWrapper.Vendor
 		chartName := packageWrapper.Name
 		if err := annotate(vendor, chartName, annotationFeatured, inputIndex, false, true); err != nil {
 			return fmt.Errorf("failed to annotate %q: %w", packageWrapper.FullName(), err)
@@ -1177,7 +1177,7 @@ func removeFeaturedChart(c *cli.Context) error {
 	}
 	packageWrapper := packageList[0]
 
-	vendor := packageWrapper.ParsedVendor
+	vendor := packageWrapper.Vendor
 	chartName := packageWrapper.Name
 	if err := annotate(vendor, chartName, annotationFeatured, "", true, false); err != nil {
 		return fmt.Errorf("failed to deannotate %q: %w", packageWrapper.FullName(), err)
@@ -1234,7 +1234,7 @@ func hideChart(c *cli.Context) error {
 	}
 	packageWrapper := packageWrappers[0]
 
-	vendor := packageWrapper.ParsedVendor
+	vendor := packageWrapper.Vendor
 	chartName := packageWrapper.Name
 	if err := annotate(vendor, chartName, annotationHidden, "true", false, false); err != nil {
 		return fmt.Errorf("failed to annotate package: %w", err)
@@ -1391,7 +1391,7 @@ func cullCharts(c *cli.Context) error {
 	skippedPackages := make([]string, 0, len(packageWrappers))
 	for _, packageWrapper := range packageWrappers {
 		logrus.Infof("culling %s", packageWrapper.FullName())
-		existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name)
+		existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
 		if err != nil {
 			logrus.Errorf("failed to load existing charts for %q: %s", packageWrapper.FullName(), err)
 			skippedPackages = append(skippedPackages, packageWrapper.FullName())
@@ -1411,7 +1411,7 @@ func cullCharts(c *cli.Context) error {
 			continue
 		}
 
-		if err := writeCharts(paths.GetRepoRoot(), packageWrapper.ParsedVendor, packageWrapper.Name, keptCharts); err != nil {
+		if err := writeCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, keptCharts); err != nil {
 			logrus.Errorf("failed to write charts for %q: %s", packageWrapper.FullName(), err)
 			skippedPackages = append(skippedPackages, packageWrapper.FullName())
 			continue
