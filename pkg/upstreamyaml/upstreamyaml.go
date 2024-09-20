@@ -39,7 +39,7 @@ type UpstreamYaml struct {
 	Vendor          string         `json:"Vendor,omitempty"`
 }
 
-func ParseUpstreamYaml(packagePath string) (UpstreamYaml, error) {
+func Parse(packagePath string) (UpstreamYaml, error) {
 	upstreamYamlPath := filepath.Join(packagePath, UpstreamOptionsFile)
 	logrus.Debugf("Attempting to parse %s", upstreamYamlPath)
 	upstreamYamlFile, err := os.ReadFile(upstreamYamlPath)

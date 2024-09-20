@@ -982,7 +982,7 @@ func listPackageWrappers(currentPackage string) (PackageList, error) {
 			Name:   parts[2],
 		}
 
-		upstreamYaml, err := upstreamyaml.ParseUpstreamYaml(packageWrapper.Path)
+		upstreamYaml, err := upstreamyaml.Parse(packageWrapper.Path)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse upstream.yaml: %w", err)
 		}
