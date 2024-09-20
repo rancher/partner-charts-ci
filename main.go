@@ -18,8 +18,8 @@ import (
 	"github.com/rancher/partner-charts-ci/pkg/conform"
 	"github.com/rancher/partner-charts-ci/pkg/fetcher"
 	"github.com/rancher/partner-charts-ci/pkg/icons"
-	"github.com/rancher/partner-charts-ci/pkg/parse"
 	"github.com/rancher/partner-charts-ci/pkg/paths"
+	"github.com/rancher/partner-charts-ci/pkg/upstreamyaml"
 	"github.com/rancher/partner-charts-ci/pkg/validate"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -95,7 +95,7 @@ type PackageWrapper struct {
 	// SourceMetadata represents metadata fetched from the upstream repository
 	SourceMetadata *fetcher.ChartSourceMetadata
 	// The package's upstream.yaml file
-	UpstreamYaml *parse.UpstreamYaml
+	UpstreamYaml *upstreamyaml.UpstreamYaml
 	// The user-facing (i.e. pretty) chart vendor name
 	DisplayVendor string
 	// The developer-facing chart vendor name
@@ -982,7 +982,7 @@ func listPackageWrappers(currentPackage string) (PackageList, error) {
 			Name:   parts[2],
 		}
 
-		upstreamYaml, err := parse.ParseUpstreamYaml(packageWrapper.Path)
+		upstreamYaml, err := upstreamyaml.ParseUpstreamYaml(packageWrapper.Path)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse upstream.yaml: %w", err)
 		}
@@ -1531,7 +1531,7 @@ func deprecatePackage(c *cli.Context) error {
 
 	// set Deprecated: true in upstream.yaml
 	packageWrapper.UpstreamYaml.Deprecated = true
-	if err := parse.WriteUpstreamYaml(packageWrapper.Path, *packageWrapper.UpstreamYaml); err != nil {
+	if err := upstreamyaml.WriteUpstreamYaml(packageWrapper.Path, *packageWrapper.UpstreamYaml); err != nil {
 		return fmt.Errorf("failed to write upstream.yaml: %w", err)
 	}
 
