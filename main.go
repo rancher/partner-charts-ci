@@ -96,7 +96,7 @@ type PackageWrapper struct {
 	// The package's upstream.yaml file
 	UpstreamYaml *parse.UpstreamYaml
 	// The user-facing (i.e. pretty) chart vendor name
-	Vendor string
+	DisplayVendor string
 	// The developer-facing chart vendor name
 	ParsedVendor string
 }
@@ -984,9 +984,9 @@ func listPackageWrappers(currentPackage string) (PackageList, error) {
 		packageWrapper.UpstreamYaml = &upstreamYaml
 
 		if packageWrapper.UpstreamYaml.Vendor != "" {
-			packageWrapper.Vendor = packageWrapper.UpstreamYaml.Vendor
+			packageWrapper.DisplayVendor = packageWrapper.UpstreamYaml.Vendor
 		} else {
-			packageWrapper.Vendor = packageWrapper.ParsedVendor
+			packageWrapper.DisplayVendor = packageWrapper.ParsedVendor
 		}
 
 		if packageWrapper.UpstreamYaml.DisplayName != "" {
