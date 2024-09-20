@@ -3,7 +3,6 @@ package upstreamyaml
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/sirupsen/logrus"
 
@@ -39,8 +38,7 @@ type UpstreamYaml struct {
 	Vendor          string         `json:"Vendor,omitempty"`
 }
 
-func Parse(packagePath string) (UpstreamYaml, error) {
-	upstreamYamlPath := filepath.Join(packagePath, UpstreamOptionsFile)
+func Parse(upstreamYamlPath string) (UpstreamYaml, error) {
 	logrus.Debugf("Attempting to parse %s", upstreamYamlPath)
 	upstreamYamlFile, err := os.ReadFile(upstreamYamlPath)
 	upstreamYaml := UpstreamYaml{}
@@ -53,8 +51,7 @@ func Parse(packagePath string) (UpstreamYaml, error) {
 	return upstreamYaml, err
 }
 
-func Write(packagePath string, upstreamYaml UpstreamYaml) error {
-	upstreamYamlPath := filepath.Join(packagePath, UpstreamOptionsFile)
+func Write(upstreamYamlPath string, upstreamYaml UpstreamYaml) error {
 	logrus.Debugf("Attempting to write %s", upstreamYamlPath)
 	contents, err := yaml.Marshal(upstreamYaml)
 	if err != nil {

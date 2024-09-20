@@ -982,7 +982,8 @@ func listPackageWrappers(currentPackage string) (PackageList, error) {
 			Name:   parts[2],
 		}
 
-		upstreamYaml, err := upstreamyaml.Parse(packageWrapper.Path)
+		upstreamYamlPath := filepath.Join(packageWrapper.Path, "upstream.yaml")
+		upstreamYaml, err := upstreamyaml.Parse(upstreamYamlPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse upstream.yaml: %w", err)
 		}
@@ -1531,7 +1532,8 @@ func deprecatePackage(c *cli.Context) error {
 
 	// set Deprecated: true in upstream.yaml
 	packageWrapper.UpstreamYaml.Deprecated = true
-	if err := upstreamyaml.Write(packageWrapper.Path, *packageWrapper.UpstreamYaml); err != nil {
+	upstreamYamlPath := filepath.Join(packageWrapper.Path, "upstream.yaml")
+	if err := upstreamyaml.Write(upstreamYamlPath, *packageWrapper.UpstreamYaml); err != nil {
 		return fmt.Errorf("failed to write upstream.yaml: %w", err)
 	}
 
