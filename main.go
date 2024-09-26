@@ -1049,6 +1049,11 @@ func generateChanges(auto bool) {
 
 	packageList := make(PackageList, 0, len(packageWrappers))
 	for _, packageWrapper := range packageWrappers {
+		if packageWrapper.UpstreamYaml.Deprecated {
+			logrus.Warnf("Package %s is deprecated; skipping update", packageWrapper.FullName())
+			continue
+		}
+
 		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
 		updated, err := packageWrapper.Populate()
 		if err != nil {
@@ -1483,10 +1488,10 @@ func deprecatePackage(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
-	for _, existingChart := range chartWrappers {
-		if !existingChart.Metadata.Deprecated {
-			existingChart.Metadata.Deprecated = true
-			existingChart.Modified = true
+	for _, chartWrapper := range chartWrappers {
+		if !chartWrapper.Metadata.Deprecated {
+			chartWrapper.Metadata.Deprecated = true
+			chartWrapper.Modified = true
 		}
 	}
 	if err := writeCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, chartWrappers); err != nil {
