@@ -1471,11 +1471,31 @@ func deprecatePackage(c *cli.Context) error {
 		return fmt.Errorf("failed to list package wrappers: %w", err)
 	}
 	packageWrapper := packageWrappers[0]
-	fmt.Println(packageWrapper)
 
 	// set Deprecated: true in upstream.yaml
+	packageWrapper.UpstreamYaml.Deprecated = true
+	if err := parse.WriteUpstreamYaml(currentPackage, *packageWrapper.UpstreamYaml); err != nil {
+		return fmt.Errorf("failed to write upstream.yaml: %w", err)
+	}
 
 	// set deprecated: true in each chart version's Chart.yaml
+	chartWrappers, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+	if err != nil {
+		return fmt.Errorf("failed to load existing charts: %w", err)
+	}
+	for _, existingChart := range chartWrappers {
+		if !existingChart.Metadata.Deprecated {
+			existingChart.Metadata.Deprecated = true
+			existingChart.Modified = true
+		}
+	}
+	if err := writeCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, chartWrappers); err != nil {
+		return fmt.Errorf("failed to write charts: %w", err)
+	}
+
+	if err := writeIndex(); err != nil {
+		return fmt.Errorf("failed to write index: %w", err)
+	}
 
 	return nil
 }
@@ -1555,7 +1575,7 @@ func main() {
 		},
 		{
 			Name:      "deprecate",
-			Usage:     "Deprecate a package and all of its charts",
+			Usage:     "Deprecate a package and all of its associated chart versions",
 			Action:    deprecatePackage,
 			ArgsUsage: "<package>",
 		},

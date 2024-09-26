@@ -21,6 +21,7 @@ type UpstreamYaml struct {
 	AHRepoName         string         `json:"ArtifactHubRepo"`
 	AutoInstall        string         `json:"AutoInstall"`
 	ChartYaml          chart.Metadata `json:"ChartMetadata"`
+	Deprecated         bool           `json:"Deprecated"`
 	DisplayName        string         `json:"DisplayName"`
 	Experimental       bool           `json:"Experimental"`
 	Fetch              string         `json:"Fetch"`
