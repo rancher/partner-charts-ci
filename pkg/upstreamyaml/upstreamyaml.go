@@ -1,6 +1,7 @@
 package upstreamyaml
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -48,6 +49,54 @@ func (upstreamYaml *UpstreamYaml) setDefaults() {
 	}
 }
 
+func (upstreamYaml *UpstreamYaml) validate() error {
+	if upstreamYaml.Fetch != "latest" && upstreamYaml.HelmChart == "" {
+		return errors.New("Fetch is latest but HelmChart is not set")
+	}
+	if upstreamYaml.Fetch != "latest" && upstreamYaml.HelmRepo == "" {
+		return errors.New("Fetch is latest but HelmRepo is not set")
+	}
+
+	if len(upstreamYaml.TrackVersions) != 0 && upstreamYaml.HelmChart == "" {
+		return errors.New("TrackVersions is set but HelmChart is not set")
+	}
+	if len(upstreamYaml.TrackVersions) != 0 && upstreamYaml.HelmRepo == "" {
+		return errors.New("TrackVersions is set but HelmRepo is not set")
+	}
+
+	if upstreamYaml.ArtifactHubPackage != "" && upstreamYaml.ArtifactHubRepo == "" {
+		return errors.New("ArtifactHubPackage is set but ArtifactHubRepo is not set")
+	}
+	if upstreamYaml.ArtifactHubRepo != "" && upstreamYaml.ArtifactHubPackage == "" {
+		return errors.New("ArtifactHubRepo is set but ArtifactHubPackage is not set")
+	}
+
+	if upstreamYaml.GitBranch != "" && upstreamYaml.GitRepo == "" {
+		return errors.New("GitBranch is set but GitRepo is not set")
+	}
+	if upstreamYaml.GitHubRelease && upstreamYaml.GitRepo == "" {
+		return errors.New("GitHubRelease is set but GitRepo is not set")
+	}
+	if upstreamYaml.GitSubdirectory != "" && upstreamYaml.GitRepo == "" {
+		return errors.New("GitSubdirectory is set but GitRepo is not set")
+	}
+
+	if upstreamYaml.HelmChart != "" && upstreamYaml.HelmRepo == "" {
+		return errors.New("HelmChart is set but HelmRepo is not set")
+	}
+	if upstreamYaml.HelmRepo != "" && upstreamYaml.HelmChart == "" {
+		return errors.New("HelmRepo is set but HelmChart is not set")
+	}
+
+	if !(upstreamYaml.ArtifactHubPackage != "" && upstreamYaml.ArtifactHubRepo != "" ||
+		upstreamYaml.GitRepo != "" ||
+		upstreamYaml.HelmRepo != "" && upstreamYaml.HelmChart != "") {
+		return errors.New("must define upstream")
+	}
+
+	return nil
+}
+
 func Parse(upstreamYamlPath string) (*UpstreamYaml, error) {
 	logrus.Debugf("Attempting to parse %s", upstreamYamlPath)
 	contents, err := os.ReadFile(upstreamYamlPath)
@@ -62,7 +111,11 @@ func Parse(upstreamYamlPath string) (*UpstreamYaml, error) {
 
 	upstreamYaml.setDefaults()
 
-	return upstreamYaml, err
+	if err := upstreamYaml.validate(); err != nil {
+		return nil, fmt.Errorf("invalid upstream.yaml: %w", err)
+	}
+
+	return upstreamYaml, nil
 }
 
 func Write(upstreamYamlPath string, upstreamYaml UpstreamYaml) error {
