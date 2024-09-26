@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -50,4 +51,17 @@ func ParseUpstreamYaml(packagePath string) (UpstreamYaml, error) {
 	}
 
 	return upstreamYaml, err
+}
+
+func WriteUpstreamYaml(packagePath string, upstreamYaml UpstreamYaml) error {
+	upstreamYamlPath := filepath.Join(packagePath, UpstreamOptionsFile)
+	logrus.Debugf("Attempting to write %s", upstreamYamlPath)
+	contents, err := yaml.Marshal(upstreamYaml)
+	if err != nil {
+		return fmt.Errorf("failed to marshal given UpstreamYaml to YAML: %w", err)
+	}
+	if err := os.WriteFile(upstreamYamlPath, contents, 0o644); err != nil {
+		return fmt.Errorf("failed to write %q: %w", upstreamYamlPath, err)
+	}
+	return err
 }
