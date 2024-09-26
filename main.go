@@ -1460,6 +1460,26 @@ func getOlderAndNewerChartVersions(days int) (map[string][]string, map[string][]
 	return olderVersions, newerVersions, nil
 }
 
+func deprecatePackage(c *cli.Context) error {
+	if len(c.Args()) != 1 {
+		return errors.New("must provide package name as argument")
+	}
+	currentPackage := c.Args().Get(0)
+
+	packageWrappers, err := listPackageWrappers(currentPackage)
+	if err != nil {
+		return fmt.Errorf("failed to list package wrappers: %w", err)
+	}
+	packageWrapper := packageWrappers[0]
+	fmt.Println(packageWrapper)
+
+	// set Deprecated: true in upstream.yaml
+
+	// set deprecated: true in each chart version's Chart.yaml
+
+	return nil
+}
+
 func main() {
 	if len(os.Getenv("DEBUG")) > 0 {
 		logrus.SetLevel(logrus.DebugLevel)
@@ -1532,6 +1552,12 @@ func main() {
 			Usage:     "Remove versions of charts older than a number of days",
 			Action:    cullCharts,
 			ArgsUsage: "<days>",
+		},
+		{
+			Name:      "deprecate",
+			Usage:     "Deprecate a package and all of its charts",
+			Action:    deprecatePackage,
+			ArgsUsage: "<package>",
 		},
 	}
 
