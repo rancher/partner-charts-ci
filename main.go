@@ -1479,7 +1479,7 @@ func deprecatePackage(c *cli.Context) error {
 
 	// set Deprecated: true in upstream.yaml
 	packageWrapper.UpstreamYaml.Deprecated = true
-	if err := parse.WriteUpstreamYaml(currentPackage, *packageWrapper.UpstreamYaml); err != nil {
+	if err := parse.WriteUpstreamYaml(packageWrapper.Path, *packageWrapper.UpstreamYaml); err != nil {
 		return fmt.Errorf("failed to write upstream.yaml: %w", err)
 	}
 
