@@ -64,5 +64,5 @@ func WriteUpstreamYaml(packagePath string, upstreamYaml UpstreamYaml) error {
 	if err := os.WriteFile(upstreamYamlPath, contents, 0o644); err != nil {
 		return fmt.Errorf("failed to write %q: %w", upstreamYamlPath, err)
 	}
-	return err
+	return nil
 }
