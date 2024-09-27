@@ -1049,6 +1049,11 @@ func generateChanges(auto bool) {
 
 	packageList := make(PackageList, 0, len(packageWrappers))
 	for _, packageWrapper := range packageWrappers {
+		if packageWrapper.UpstreamYaml.Deprecated {
+			logrus.Warnf("Package %s is deprecated; skipping update", packageWrapper.FullName())
+			continue
+		}
+
 		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
 		updated, err := packageWrapper.Populate()
 		if err != nil {
@@ -1460,6 +1465,46 @@ func getOlderAndNewerChartVersions(days int) (map[string][]string, map[string][]
 	return olderVersions, newerVersions, nil
 }
 
+func deprecatePackage(c *cli.Context) error {
+	if len(c.Args()) != 1 {
+		return errors.New("must provide package name as argument")
+	}
+	currentPackage := c.Args().Get(0)
+
+	packageWrappers, err := listPackageWrappers(currentPackage)
+	if err != nil {
+		return fmt.Errorf("failed to list package wrappers: %w", err)
+	}
+	packageWrapper := packageWrappers[0]
+
+	// set Deprecated: true in upstream.yaml
+	packageWrapper.UpstreamYaml.Deprecated = true
+	if err := parse.WriteUpstreamYaml(packageWrapper.Path, *packageWrapper.UpstreamYaml); err != nil {
+		return fmt.Errorf("failed to write upstream.yaml: %w", err)
+	}
+
+	// set deprecated: true in each chart version's Chart.yaml
+	chartWrappers, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+	if err != nil {
+		return fmt.Errorf("failed to load existing charts: %w", err)
+	}
+	for _, chartWrapper := range chartWrappers {
+		if !chartWrapper.Metadata.Deprecated {
+			chartWrapper.Metadata.Deprecated = true
+			chartWrapper.Modified = true
+		}
+	}
+	if err := writeCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, chartWrappers); err != nil {
+		return fmt.Errorf("failed to write charts: %w", err)
+	}
+
+	if err := writeIndex(); err != nil {
+		return fmt.Errorf("failed to write index: %w", err)
+	}
+
+	return nil
+}
+
 func main() {
 	if len(os.Getenv("DEBUG")) > 0 {
 		logrus.SetLevel(logrus.DebugLevel)
@@ -1532,6 +1577,12 @@ func main() {
 			Usage:     "Remove versions of charts older than a number of days",
 			Action:    cullCharts,
 			ArgsUsage: "<days>",
+		},
+		{
+			Name:      "deprecate",
+			Usage:     "Deprecate a package and all of its associated chart versions",
+			Action:    deprecatePackage,
+			ArgsUsage: "<package>",
 		},
 	}
 
