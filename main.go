@@ -723,10 +723,8 @@ func addAnnotations(packageWrapper PackageWrapper, helmChart *chart.Chart) error
 	// dependency without downloading dependencies. This can't be right.
 	// And if it is, this needs a comment explaining what is going on.
 	// Need to investigate further.
-	if !packageWrapper.UpstreamYaml.RemoteDependencies {
-		for _, d := range helmChart.Metadata.Dependencies {
-			d.Repository = fmt.Sprintf("file://./charts/%s", d.Name)
-		}
+	for _, d := range helmChart.Metadata.Dependencies {
+		d.Repository = fmt.Sprintf("file://./charts/%s", d.Name)
 	}
 
 	annotations[annotationCertified] = "partner"
