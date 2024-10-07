@@ -17,27 +17,26 @@ const (
 )
 
 type UpstreamYaml struct {
-	AHPackageName      string         `json:"ArtifactHubPackage,omitempty"`
-	AHRepoName         string         `json:"ArtifactHubRepo,omitempty"`
-	AutoInstall        string         `json:"AutoInstall,omitempty"`
-	ChartYaml          chart.Metadata `json:"ChartMetadata,omitempty"`
-	Deprecated         bool           `json:"Deprecated,omitempty"`
-	DisplayName        string         `json:"DisplayName,omitempty"`
-	Experimental       bool           `json:"Experimental,omitempty"`
-	Fetch              string         `json:"Fetch,omitempty"`
-	GitBranch          string         `json:"GitBranch,omitempty"`
-	GitHubRelease      bool           `json:"GitHubRelease,omitempty"`
-	GitRepoUrl         string         `json:"GitRepo,omitempty"`
-	GitSubDirectory    string         `json:"GitSubdirectory,omitempty"`
-	HelmChart          string         `json:"HelmChart,omitempty"`
-	HelmRepoUrl        string         `json:"HelmRepo,omitempty"`
-	Hidden             bool           `json:"Hidden,omitempty"`
-	Namespace          string         `json:"Namespace,omitempty"`
-	PackageVersion     int            `json:"PackageVersion,omitempty"`
-	RemoteDependencies bool           `json:"RemoteDependencies,omitempty"`
-	TrackVersions      []string       `json:"TrackVersions,omitempty"`
-	ReleaseName        string         `json:"ReleaseName,omitempty"`
-	Vendor             string         `json:"Vendor,omitempty"`
+	AHPackageName   string         `json:"ArtifactHubPackage,omitempty"`
+	AHRepoName      string         `json:"ArtifactHubRepo,omitempty"`
+	AutoInstall     string         `json:"AutoInstall,omitempty"`
+	ChartYaml       chart.Metadata `json:"ChartMetadata,omitempty"`
+	Deprecated      bool           `json:"Deprecated,omitempty"`
+	DisplayName     string         `json:"DisplayName,omitempty"`
+	Experimental    bool           `json:"Experimental,omitempty"`
+	Fetch           string         `json:"Fetch,omitempty"`
+	GitBranch       string         `json:"GitBranch,omitempty"`
+	GitHubRelease   bool           `json:"GitHubRelease,omitempty"`
+	GitRepoUrl      string         `json:"GitRepo,omitempty"`
+	GitSubDirectory string         `json:"GitSubdirectory,omitempty"`
+	HelmChart       string         `json:"HelmChart,omitempty"`
+	HelmRepoUrl     string         `json:"HelmRepo,omitempty"`
+	Hidden          bool           `json:"Hidden,omitempty"`
+	Namespace       string         `json:"Namespace,omitempty"`
+	PackageVersion  int            `json:"PackageVersion,omitempty"`
+	TrackVersions   []string       `json:"TrackVersions,omitempty"`
+	ReleaseName     string         `json:"ReleaseName,omitempty"`
+	Vendor          string         `json:"Vendor,omitempty"`
 }
 
 func ParseUpstreamYaml(packagePath string) (UpstreamYaml, error) {
