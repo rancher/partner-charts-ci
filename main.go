@@ -57,6 +57,7 @@ const (
 var (
 	version = "v0.0.0"
 	commit  = "HEAD"
+	force   = false
 )
 
 // ChartWrapper is like a chart.Chart, but it tracks whether the chart
@@ -1469,6 +1470,53 @@ func getOlderAndNewerChartVersions(days int) (map[string][]string, map[string][]
 	return olderVersions, newerVersions, nil
 }
 
+func removePackage(c *cli.Context) error {
+	if len(c.Args()) != 1 {
+		return errors.New("must provide package name as argument")
+	}
+	currentPackage := c.Args().Get(0)
+
+	packageWrappers, err := listPackageWrappers(currentPackage)
+	if err != nil {
+		return fmt.Errorf("failed to list packages: %w", err)
+	}
+	packageWrapper := packageWrappers[0]
+
+	if !force && !packageWrapper.UpstreamYaml.Deprecated {
+		return fmt.Errorf("%s is not deprecated; use --force to force removal", packageWrapper.FullName())
+	}
+
+	removalPaths := []string{
+		filepath.Join(paths.GetRepoRoot(), repositoryPackagesDir, packageWrapper.Vendor, packageWrapper.Name),
+		filepath.Join(paths.GetRepoRoot(), repositoryChartsDir, packageWrapper.Vendor, packageWrapper.Name),
+	}
+
+	assetFiles, err := getExistingChartTgzFiles(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+	if err != nil {
+		return fmt.Errorf("failed to list asset files for %s: %w", packageWrapper.FullName(), err)
+	}
+	removalPaths = append(removalPaths, assetFiles...)
+
+	localIconPath, err := icons.GetDownloadedIconPath(packageWrapper.Name)
+	if err != nil {
+		logrus.Warnf("failed to get icon path for %s: %s", packageWrapper.FullName(), err)
+	} else {
+		removalPaths = append(removalPaths, localIconPath)
+	}
+
+	for _, removalPath := range removalPaths {
+		if err := os.RemoveAll(removalPath); err != nil {
+			logrus.Errorf("failed to remove %q: %s", removalPath, err)
+		}
+	}
+
+	if err := writeIndex(); err != nil {
+		return fmt.Errorf("failed to write index: %w", err)
+	}
+
+	return nil
+}
+
 func deprecatePackage(c *cli.Context) error {
 	if len(c.Args()) != 1 {
 		return errors.New("must provide package name as argument")
@@ -1581,6 +1629,19 @@ func main() {
 			Usage:     "Remove versions of charts older than a number of days",
 			Action:    cullCharts,
 			ArgsUsage: "<days>",
+		},
+		{
+			Name:      "remove",
+			Usage:     "Remove a package and all of its associated chart versions",
+			Action:    removePackage,
+			ArgsUsage: "<package>",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:        "force, f",
+					Usage:       "Skip check for package deprecation",
+					Destination: &force,
+				},
+			},
 		},
 		{
 			Name:      "deprecate",
