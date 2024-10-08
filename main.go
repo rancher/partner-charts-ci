@@ -597,25 +597,12 @@ func writeCharts(repoRoot, vendor, chartName string, chartWrappers []*ChartWrapp
 // <vendor>/<packageName> from the assets directory. It returns
 // them in a slice that is sorted by chart version, newest first.
 func loadExistingCharts(repoRoot string, vendor string, packageName string) ([]*ChartWrapper, error) {
-	assetsPath := filepath.Join(repoRoot, repositoryAssetsDir, vendor)
-	tgzFiles, err := os.ReadDir(assetsPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return []*ChartWrapper{}, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to read dir %q: %w", assetsPath, err)
+	existingChartPaths, err := getExistingChartTgzFiles(repoRoot, vendor, packageName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get paths to existing chart tgz files: %w", err)
 	}
-	existingChartWrappers := make([]*ChartWrapper, 0, len(tgzFiles))
-	for _, tgzFile := range tgzFiles {
-		if tgzFile.IsDir() {
-			continue
-		}
-		matchName := filepath.Base(tgzFile.Name())
-		if matched, err := filepath.Match(fmt.Sprintf("%s-*.tgz", packageName), matchName); err != nil {
-			return nil, fmt.Errorf("failed to check match for %q: %w", matchName, err)
-		} else if !matched {
-			continue
-		}
-		existingChartPath := filepath.Join(assetsPath, tgzFile.Name())
+	existingChartWrappers := make([]*ChartWrapper, 0, len(existingChartPaths))
+	for _, existingChartPath := range existingChartPaths {
 		existingChart, err := loader.LoadFile(existingChartPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load chart version %q: %w", existingChartPath, err)
@@ -629,6 +616,33 @@ func loadExistingCharts(repoRoot string, vendor string, packageName string) ([]*
 		return parsedB.Compare(parsedA)
 	})
 	return existingChartWrappers, nil
+}
+
+// getExistingChartTgzFiles lists the .tgz files for package <vendor>/
+// <packageName> from that package vendor's assets directory.
+func getExistingChartTgzFiles(repoRoot string, vendor string, packageName string) ([]string, error) {
+	assetsPath := filepath.Join(repoRoot, repositoryAssetsDir, vendor)
+	tgzFiles, err := os.ReadDir(assetsPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return []string{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to read dir %q: %w", assetsPath, err)
+	}
+	filePaths := make([]string, 0, len(tgzFiles))
+	for _, tgzFile := range tgzFiles {
+		if tgzFile.IsDir() {
+			continue
+		}
+		matchName := filepath.Base(tgzFile.Name())
+		if matched, err := filepath.Match(fmt.Sprintf("%s-*.tgz", packageName), matchName); err != nil {
+			return nil, fmt.Errorf("failed to check match for %q: %w", matchName, err)
+		} else if !matched {
+			continue
+		}
+		existingChartPath := filepath.Join(assetsPath, tgzFile.Name())
+		filePaths = append(filePaths, existingChartPath)
+	}
+	return filePaths, nil
 }
 
 // integrateCharts integrates new charts from upstream with any
