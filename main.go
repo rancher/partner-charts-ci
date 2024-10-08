@@ -57,6 +57,7 @@ const (
 var (
 	version = "v0.0.0"
 	commit  = "HEAD"
+	force   = false
 )
 
 // ChartWrapper is like a chart.Chart, but it tracks whether the chart
@@ -597,25 +598,12 @@ func writeCharts(repoRoot, vendor, chartName string, chartWrappers []*ChartWrapp
 // <vendor>/<packageName> from the assets directory. It returns
 // them in a slice that is sorted by chart version, newest first.
 func loadExistingCharts(repoRoot string, vendor string, packageName string) ([]*ChartWrapper, error) {
-	assetsPath := filepath.Join(repoRoot, repositoryAssetsDir, vendor)
-	tgzFiles, err := os.ReadDir(assetsPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return []*ChartWrapper{}, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to read dir %q: %w", assetsPath, err)
+	existingChartPaths, err := getExistingChartTgzFiles(repoRoot, vendor, packageName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get paths to existing chart tgz files: %w", err)
 	}
-	existingChartWrappers := make([]*ChartWrapper, 0, len(tgzFiles))
-	for _, tgzFile := range tgzFiles {
-		if tgzFile.IsDir() {
-			continue
-		}
-		matchName := filepath.Base(tgzFile.Name())
-		if matched, err := filepath.Match(fmt.Sprintf("%s-*.tgz", packageName), matchName); err != nil {
-			return nil, fmt.Errorf("failed to check match for %q: %w", matchName, err)
-		} else if !matched {
-			continue
-		}
-		existingChartPath := filepath.Join(assetsPath, tgzFile.Name())
+	existingChartWrappers := make([]*ChartWrapper, 0, len(existingChartPaths))
+	for _, existingChartPath := range existingChartPaths {
 		existingChart, err := loader.LoadFile(existingChartPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load chart version %q: %w", existingChartPath, err)
@@ -629,6 +617,33 @@ func loadExistingCharts(repoRoot string, vendor string, packageName string) ([]*
 		return parsedB.Compare(parsedA)
 	})
 	return existingChartWrappers, nil
+}
+
+// getExistingChartTgzFiles lists the .tgz files for package <vendor>/
+// <packageName> from that package vendor's assets directory.
+func getExistingChartTgzFiles(repoRoot string, vendor string, packageName string) ([]string, error) {
+	assetsPath := filepath.Join(repoRoot, repositoryAssetsDir, vendor)
+	tgzFiles, err := os.ReadDir(assetsPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return []string{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to read dir %q: %w", assetsPath, err)
+	}
+	filePaths := make([]string, 0, len(tgzFiles))
+	for _, tgzFile := range tgzFiles {
+		if tgzFile.IsDir() {
+			continue
+		}
+		matchName := filepath.Base(tgzFile.Name())
+		if matched, err := filepath.Match(fmt.Sprintf("%s-*.tgz", packageName), matchName); err != nil {
+			return nil, fmt.Errorf("failed to check match for %q: %w", matchName, err)
+		} else if !matched {
+			continue
+		}
+		existingChartPath := filepath.Join(assetsPath, tgzFile.Name())
+		filePaths = append(filePaths, existingChartPath)
+	}
+	return filePaths, nil
 }
 
 // integrateCharts integrates new charts from upstream with any
@@ -1455,6 +1470,53 @@ func getOlderAndNewerChartVersions(days int) (map[string][]string, map[string][]
 	return olderVersions, newerVersions, nil
 }
 
+func removePackage(c *cli.Context) error {
+	if len(c.Args()) != 1 {
+		return errors.New("must provide package name as argument")
+	}
+	currentPackage := c.Args().Get(0)
+
+	packageWrappers, err := listPackageWrappers(currentPackage)
+	if err != nil {
+		return fmt.Errorf("failed to list packages: %w", err)
+	}
+	packageWrapper := packageWrappers[0]
+
+	if !force && !packageWrapper.UpstreamYaml.Deprecated {
+		return fmt.Errorf("%s is not deprecated; use --force to force removal", packageWrapper.FullName())
+	}
+
+	removalPaths := []string{
+		filepath.Join(paths.GetRepoRoot(), repositoryPackagesDir, packageWrapper.Vendor, packageWrapper.Name),
+		filepath.Join(paths.GetRepoRoot(), repositoryChartsDir, packageWrapper.Vendor, packageWrapper.Name),
+	}
+
+	assetFiles, err := getExistingChartTgzFiles(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+	if err != nil {
+		return fmt.Errorf("failed to list asset files for %s: %w", packageWrapper.FullName(), err)
+	}
+	removalPaths = append(removalPaths, assetFiles...)
+
+	localIconPath, err := icons.GetDownloadedIconPath(packageWrapper.Name)
+	if err != nil {
+		logrus.Warnf("failed to get icon path for %s: %s", packageWrapper.FullName(), err)
+	} else {
+		removalPaths = append(removalPaths, localIconPath)
+	}
+
+	for _, removalPath := range removalPaths {
+		if err := os.RemoveAll(removalPath); err != nil {
+			logrus.Errorf("failed to remove %q: %s", removalPath, err)
+		}
+	}
+
+	if err := writeIndex(); err != nil {
+		return fmt.Errorf("failed to write index: %w", err)
+	}
+
+	return nil
+}
+
 func deprecatePackage(c *cli.Context) error {
 	if len(c.Args()) != 1 {
 		return errors.New("must provide package name as argument")
@@ -1567,6 +1629,19 @@ func main() {
 			Usage:     "Remove versions of charts older than a number of days",
 			Action:    cullCharts,
 			ArgsUsage: "<days>",
+		},
+		{
+			Name:      "remove",
+			Usage:     "Remove a package and all of its associated chart versions",
+			Action:    removePackage,
+			ArgsUsage: "<package>",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:        "force, f",
+					Usage:       "Skip check for package deprecation",
+					Destination: &force,
+				},
+			},
 		},
 		{
 			Name:      "deprecate",
