@@ -1244,6 +1244,12 @@ func hideChart(c *cli.Context) error {
 	}
 	packageWrapper := packageWrappers[0]
 
+	// set Hidden: true in upstream.yaml
+	packageWrapper.UpstreamYaml.Hidden = true
+	if err := parse.WriteUpstreamYaml(packageWrapper.Path, *packageWrapper.UpstreamYaml); err != nil {
+		return fmt.Errorf("failed to write upstream.yaml: %w", err)
+	}
+
 	vendor := packageWrapper.Vendor
 	chartName := packageWrapper.Name
 	if err := annotate(vendor, chartName, annotationHidden, "true", false, false); err != nil {
