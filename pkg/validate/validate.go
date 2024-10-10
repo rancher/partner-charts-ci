@@ -14,18 +14,7 @@ import (
 	"github.com/rancher/partner-charts-ci/pkg/conform"
 	"github.com/sirupsen/logrus"
 	"helm.sh/helm/v3/pkg/chart/loader"
-
-	"sigs.k8s.io/yaml"
 )
-
-type ConfigurationYaml struct {
-	Validate []ValidateUpstream
-}
-
-type ValidateUpstream struct {
-	Url    string
-	Branch string
-}
 
 type DirectoryComparison struct {
 	Unchanged []string
@@ -45,18 +34,6 @@ func (directoryComparison *DirectoryComparison) Merge(newComparison DirectoryCom
 		directoryComparison.Match = false
 	}
 
-}
-
-func ReadConfig(configYamlPath string) (ConfigurationYaml, error) {
-	upstreamYamlFile, err := os.ReadFile(configYamlPath)
-	configYaml := ConfigurationYaml{}
-	if err != nil {
-		logrus.Debug(err)
-	} else {
-		err = yaml.Unmarshal(upstreamYamlFile, &configYaml)
-	}
-
-	return configYaml, err
 }
 
 func CloneRepo(url string, branch string, targetDir string) error {
