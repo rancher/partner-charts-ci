@@ -1297,6 +1297,7 @@ func validateRepo(c *cli.Context) {
 	if err != nil {
 		logrus.Fatal(err)
 	}
+	defer os.RemoveAll(cloneDir)
 
 	err = validate.CloneRepo(configYaml.ValidateUpstreams[0].Url, configYaml.ValidateUpstreams[0].Branch, cloneDir)
 	if err != nil {
@@ -1320,11 +1321,6 @@ func validateRepo(c *cli.Context) {
 		}
 		directoryComparison.Merge(newComparison)
 		validatePaths[dirPath] = newComparison
-	}
-
-	err = os.RemoveAll(cloneDir)
-	if err != nil {
-		logrus.Error(err)
 	}
 
 	if len(directoryComparison.Added) > 0 {
