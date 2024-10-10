@@ -1293,7 +1293,7 @@ func validateRepo(c *cli.Context) {
 		logrus.Fatalf("failed to read %s: %s\n", configOptionsFile, err)
 	}
 
-	if len(configYaml.Validate) == 0 || configYaml.Validate[0].Branch == "" || configYaml.Validate[0].Url == "" {
+	if len(configYaml.ValidateUpstreams) == 0 || configYaml.ValidateUpstreams[0].Branch == "" || configYaml.ValidateUpstreams[0].Url == "" {
 		logrus.Fatal("Invalid validation configuration")
 	}
 
@@ -1302,7 +1302,7 @@ func validateRepo(c *cli.Context) {
 		logrus.Fatal(err)
 	}
 
-	err = validate.CloneRepo(configYaml.Validate[0].Url, configYaml.Validate[0].Branch, cloneDir)
+	err = validate.CloneRepo(configYaml.ValidateUpstreams[0].Url, configYaml.ValidateUpstreams[0].Branch, cloneDir)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -1371,7 +1371,7 @@ func validateRepo(c *cli.Context) {
 	}
 
 	logrus.Infof("Successfully validated\n  Upstream: %s\n  Branch: %s\n",
-		configYaml.Validate[0].Url, configYaml.Validate[0].Branch)
+		configYaml.ValidateUpstreams[0].Url, configYaml.ValidateUpstreams[0].Branch)
 
 }
 

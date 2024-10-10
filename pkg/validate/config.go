@@ -9,7 +9,7 @@ import (
 )
 
 type ConfigurationYaml struct {
-	Validate []ValidateUpstream
+	ValidateUpstreams []ValidateUpstream `json:"validate"`
 }
 
 type ValidateUpstream struct {
