@@ -1280,11 +1280,6 @@ func validateRepo(c *cli.Context) {
 	validatePaths := map[string]validate.DirectoryComparison{
 		"assets": {},
 	}
-
-	excludeFiles := make(map[string]struct{})
-	var exclude = struct{}{}
-	excludeFiles["README.md"] = exclude
-
 	directoryComparison := validate.DirectoryComparison{}
 
 	configYamlPath := path.Join(paths.GetRepoRoot(), configOptionsFile)
@@ -1315,7 +1310,7 @@ func validateRepo(c *cli.Context) {
 			logrus.Infof("Directory '%s' not in upstream. Skipping...", dirPath)
 			continue
 		}
-		newComparison, err := validate.CompareDirectories(upstreamPath, updatePath, excludeFiles)
+		newComparison, err := validate.CompareDirectories(upstreamPath, updatePath)
 		if err != nil {
 			logrus.Error(err)
 		}
