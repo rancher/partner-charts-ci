@@ -21,7 +21,10 @@ type DirectoryComparison struct {
 	Modified  []string
 	Added     []string
 	Removed   []string
-	Match     bool
+}
+
+func (directoryComparison *DirectoryComparison) Match() bool {
+	return len(directoryComparison.Modified)+len(directoryComparison.Added)+len(directoryComparison.Removed) == 0
 }
 
 func (directoryComparison *DirectoryComparison) Merge(newComparison DirectoryComparison) {
@@ -29,11 +32,6 @@ func (directoryComparison *DirectoryComparison) Merge(newComparison DirectoryCom
 	directoryComparison.Modified = append(directoryComparison.Modified, newComparison.Modified...)
 	directoryComparison.Added = append(directoryComparison.Added, newComparison.Added...)
 	directoryComparison.Removed = append(directoryComparison.Removed, newComparison.Removed...)
-
-	if !newComparison.Match {
-		directoryComparison.Match = false
-	}
-
 }
 
 func CloneRepo(url string, branch string, targetDir string) error {
@@ -72,9 +70,7 @@ func ChecksumFile(filePath string) (string, error) {
 
 func CompareDirectories(leftPath, rightPath string) (DirectoryComparison, error) {
 	logrus.Debugf("Comparing directories %s and %s", leftPath, rightPath)
-	directoryComparison := DirectoryComparison{
-		Match: true,
-	}
+	directoryComparison := DirectoryComparison{}
 	checkedSet := make(map[string]struct{})
 	var checked = struct{}{}
 
@@ -149,10 +145,6 @@ func CompareDirectories(leftPath, rightPath string) (DirectoryComparison, error)
 		return DirectoryComparison{}, fmt.Errorf("failed while walking %q: %w", rightPath, err)
 	}
 
-	if len(directoryComparison.Modified)+len(directoryComparison.Added)+len(directoryComparison.Removed) > 0 {
-		directoryComparison.Match = false
-	}
-
 	return directoryComparison, nil
 }
 
@@ -212,6 +204,5 @@ func matchHelmCharts(leftPath, rightPath string) (bool, error) {
 
 	directoryComparison, err := CompareDirectories(leftOut, rightOut)
 
-	return directoryComparison.Match, err
-
+	return directoryComparison.Match(), err
 }
