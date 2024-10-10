@@ -1293,10 +1293,6 @@ func validateRepo(c *cli.Context) {
 		logrus.Fatalf("failed to read %s: %s\n", configOptionsFile, err)
 	}
 
-	if len(configYaml.ValidateUpstreams) == 0 || configYaml.ValidateUpstreams[0].Branch == "" || configYaml.ValidateUpstreams[0].Url == "" {
-		logrus.Fatal("Invalid validation configuration")
-	}
-
 	cloneDir, err := os.MkdirTemp("", "gitRepo")
 	if err != nil {
 		logrus.Fatal(err)

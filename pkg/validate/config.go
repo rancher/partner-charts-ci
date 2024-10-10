@@ -1,6 +1,8 @@
 package validate
 
 import (
+	"errors"
+	"fmt"
 	"os"
 
 	"github.com/sirupsen/logrus"
@@ -17,6 +19,19 @@ type ValidateUpstream struct {
 	Branch string
 }
 
+func (configYaml ConfigurationYaml) Validate() error {
+	if len(configYaml.ValidateUpstreams) == 0 {
+		return errors.New("must provide validation configuration")
+	}
+	if configYaml.ValidateUpstreams[0].Branch == "" {
+		return errors.New("must provide branch in validation configuration")
+	}
+	if configYaml.ValidateUpstreams[0].Url == "" {
+		return errors.New("must provide URL in validation configuration")
+	}
+	return nil
+}
+
 func ReadConfig(configYamlPath string) (ConfigurationYaml, error) {
 	upstreamYamlFile, err := os.ReadFile(configYamlPath)
 	configYaml := ConfigurationYaml{}
@@ -25,6 +40,8 @@ func ReadConfig(configYamlPath string) (ConfigurationYaml, error) {
 	} else {
 		err = yaml.Unmarshal(upstreamYamlFile, &configYaml)
 	}
-
+	if err := configYaml.Validate(); err != nil {
+		return ConfigurationYaml{}, fmt.Errorf("invalid config: %w", err)
+	}
 	return configYaml, err
 }
