@@ -1323,6 +1323,13 @@ func validateRepo(c *cli.Context) {
 		validatePaths[dirPath] = newComparison
 	}
 
+	reportValidation(directoryComparison, validatePaths)
+
+	logrus.Infof("Successfully validated\n  Upstream: %s\n  Branch: %s\n",
+		configYaml.ValidateUpstreams[0].Url, configYaml.ValidateUpstreams[0].Branch)
+}
+
+func reportValidation(directoryComparison validate.DirectoryComparison, validatePaths map[string]validate.DirectoryComparison) {
 	if len(directoryComparison.Added) > 0 {
 		outString := ""
 		for dirPath := range validatePaths {
@@ -1361,10 +1368,6 @@ func validateRepo(c *cli.Context) {
 		}
 		logrus.Fatalf("Files Modified:%s", outString)
 	}
-
-	logrus.Infof("Successfully validated\n  Upstream: %s\n  Branch: %s\n",
-		configYaml.ValidateUpstreams[0].Url, configYaml.ValidateUpstreams[0].Branch)
-
 }
 
 // cullCharts removes chart versions that are older than the passed number of
