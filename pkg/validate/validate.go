@@ -83,7 +83,7 @@ func CompareDirectories(leftPath, rightPath string) (DirectoryComparison, error)
 
 	compareLeft := func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
-			logrus.Error(err)
+			return err
 		}
 		relativePath := strings.TrimPrefix(filePath, leftPath)
 		checkedSet[relativePath] = checked
@@ -127,7 +127,7 @@ func CompareDirectories(leftPath, rightPath string) (DirectoryComparison, error)
 
 	compareRight := func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
-			logrus.Error(err)
+			return err
 		}
 		relativePath := strings.TrimPrefix(filePath, rightPath)
 
