@@ -132,7 +132,7 @@ func CompareDirectories(upstreamPath, updatePath string) (DirectoryComparison, e
 		relativePath := strings.TrimPrefix(updateFilePath, updatePath)
 
 		if _, ok := checkedSet[relativePath]; !ok && !info.IsDir() {
-			directoryComparison.Added = append(directoryComparison.Added, relativePath)
+			directoryComparison.Added = append(directoryComparison.Added, updateFilePath)
 		}
 
 		return nil
