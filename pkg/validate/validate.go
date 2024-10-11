@@ -68,68 +68,68 @@ func ChecksumFile(filePath string) (string, error) {
 	return hash, nil
 }
 
-func CompareDirectories(leftPath, rightPath string) (DirectoryComparison, error) {
-	logrus.Debugf("Comparing directories %s and %s", leftPath, rightPath)
+func CompareDirectories(upstreamPath, updatePath string) (DirectoryComparison, error) {
+	logrus.Debugf("Comparing directories %s and %s", upstreamPath, updatePath)
 	directoryComparison := DirectoryComparison{}
 	checkedSet := make(map[string]struct{})
 	var checked = struct{}{}
 
-	if _, err := os.Stat(leftPath); os.IsNotExist(err) {
+	if _, err := os.Stat(upstreamPath); os.IsNotExist(err) {
 		return directoryComparison, err
 	}
-	if _, err := os.Stat(rightPath); os.IsNotExist(err) {
+	if _, err := os.Stat(updatePath); os.IsNotExist(err) {
 		return directoryComparison, err
 	}
 
-	compareLeft := func(filePath string, info os.FileInfo, err error) error {
+	findRemovalAndModification := func(upstreamFilePath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		relativePath := strings.TrimPrefix(filePath, leftPath)
+		relativePath := strings.TrimPrefix(upstreamFilePath, upstreamPath)
 		checkedSet[relativePath] = checked
 
 		if info.IsDir() {
 			return nil
 		}
 
-		rightFilePath := path.Join(rightPath, relativePath)
-		if _, err := os.Stat(rightFilePath); os.IsNotExist(err) {
-			directoryComparison.Removed = append(directoryComparison.Removed, rightFilePath)
+		updateFilePath := path.Join(updatePath, relativePath)
+		if _, err := os.Stat(updateFilePath); os.IsNotExist(err) {
+			directoryComparison.Removed = append(directoryComparison.Removed, updateFilePath)
 			return nil
 		}
-		leftCheckSum, err := ChecksumFile(filePath)
+		leftCheckSum, err := ChecksumFile(upstreamFilePath)
 		if err != nil {
 			logrus.Error(err)
 		}
-		rightCheckSum, err := ChecksumFile(rightFilePath)
+		rightCheckSum, err := ChecksumFile(updateFilePath)
 		if err != nil {
 			logrus.Error(err)
 		}
 
-		if leftCheckSum != rightCheckSum && strings.HasSuffix(filePath, ".tgz") {
-			chartMatch, err := matchHelmCharts(filePath, rightFilePath)
+		if leftCheckSum != rightCheckSum && strings.HasSuffix(upstreamFilePath, ".tgz") {
+			chartMatch, err := matchHelmCharts(upstreamFilePath, updateFilePath)
 			if chartMatch {
-				directoryComparison.Unchanged = append(directoryComparison.Unchanged, rightFilePath)
+				directoryComparison.Unchanged = append(directoryComparison.Unchanged, updateFilePath)
 			} else {
-				directoryComparison.Modified = append(directoryComparison.Modified, rightFilePath)
+				directoryComparison.Modified = append(directoryComparison.Modified, updateFilePath)
 			}
 			if err != nil {
 				logrus.Debug(err)
 			}
 		} else if leftCheckSum != rightCheckSum {
-			directoryComparison.Modified = append(directoryComparison.Modified, rightFilePath)
+			directoryComparison.Modified = append(directoryComparison.Modified, updateFilePath)
 		} else {
-			directoryComparison.Unchanged = append(directoryComparison.Unchanged, rightFilePath)
+			directoryComparison.Unchanged = append(directoryComparison.Unchanged, updateFilePath)
 		}
 
 		return nil
 	}
 
-	compareRight := func(filePath string, info os.FileInfo, err error) error {
+	findAddition := func(updateFilePath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		relativePath := strings.TrimPrefix(filePath, rightPath)
+		relativePath := strings.TrimPrefix(updateFilePath, updatePath)
 
 		if _, ok := checkedSet[relativePath]; !ok && !info.IsDir() {
 			directoryComparison.Added = append(directoryComparison.Added, relativePath)
@@ -138,11 +138,11 @@ func CompareDirectories(leftPath, rightPath string) (DirectoryComparison, error)
 		return nil
 	}
 
-	if err := filepath.Walk(leftPath, compareLeft); err != nil {
-		return DirectoryComparison{}, fmt.Errorf("failed while walking %q: %w", leftPath, err)
+	if err := filepath.Walk(upstreamPath, findRemovalAndModification); err != nil {
+		return DirectoryComparison{}, fmt.Errorf("failed to search %q for removed or modified files: %w", upstreamPath, err)
 	}
-	if err := filepath.Walk(rightPath, compareRight); err != nil {
-		return DirectoryComparison{}, fmt.Errorf("failed while walking %q: %w", rightPath, err)
+	if err := filepath.Walk(updatePath, findAddition); err != nil {
+		return DirectoryComparison{}, fmt.Errorf("failed to search %q for added files: %w", updatePath, err)
 	}
 
 	return directoryComparison, nil
