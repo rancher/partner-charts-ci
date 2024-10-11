@@ -94,7 +94,7 @@ func CompareDirectories(leftPath, rightPath string) (DirectoryComparison, error)
 
 		rightFilePath := path.Join(rightPath, relativePath)
 		if _, err := os.Stat(rightFilePath); os.IsNotExist(err) {
-			directoryComparison.Removed = append(directoryComparison.Removed, relativePath)
+			directoryComparison.Removed = append(directoryComparison.Removed, rightFilePath)
 			return nil
 		}
 		leftCheckSum, err := ChecksumFile(filePath)
@@ -109,17 +109,17 @@ func CompareDirectories(leftPath, rightPath string) (DirectoryComparison, error)
 		if leftCheckSum != rightCheckSum && strings.HasSuffix(filePath, ".tgz") {
 			chartMatch, err := matchHelmCharts(filePath, rightFilePath)
 			if chartMatch {
-				directoryComparison.Unchanged = append(directoryComparison.Unchanged, relativePath)
+				directoryComparison.Unchanged = append(directoryComparison.Unchanged, rightFilePath)
 			} else {
-				directoryComparison.Modified = append(directoryComparison.Modified, relativePath)
+				directoryComparison.Modified = append(directoryComparison.Modified, rightFilePath)
 			}
 			if err != nil {
 				logrus.Debug(err)
 			}
 		} else if leftCheckSum != rightCheckSum {
-			directoryComparison.Modified = append(directoryComparison.Modified, relativePath)
+			directoryComparison.Modified = append(directoryComparison.Modified, rightFilePath)
 		} else {
-			directoryComparison.Unchanged = append(directoryComparison.Unchanged, relativePath)
+			directoryComparison.Unchanged = append(directoryComparison.Unchanged, rightFilePath)
 		}
 
 		return nil
