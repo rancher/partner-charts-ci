@@ -148,61 +148,62 @@ func CompareDirectories(upstreamPath, updatePath string) (DirectoryComparison, e
 	return directoryComparison, nil
 }
 
-func matchHelmCharts(leftPath, rightPath string) (bool, error) {
-	leftFile, err := os.Open(leftPath)
+// prepareTgzForComparison takes a path to a .tgz helm chart. It unpacks this
+// helm chart, applies modifications to it that cause the validation process
+// to ignore certain changes, and exports it to a temporary chart directory.
+// The caller is responsible for removing the chart directory after they are
+// finished using it.
+func prepareTgzForComparison(tgzPath string) (string, error) {
+	upstreamFile, err := os.Open(tgzPath)
 	if err != nil {
-		return false, err
+		return "", fmt.Errorf("failed to open file: %w", err)
 	}
-	defer leftFile.Close()
+	defer upstreamFile.Close()
 
-	rightFile, err := os.Open(rightPath)
+	upstreamChart, err := loader.LoadArchive(upstreamFile)
 	if err != nil {
-		return false, err
-	}
-	defer rightFile.Close()
-
-	leftChart, err := loader.LoadArchive(leftFile)
-	if err != nil {
-		return false, err
-	}
-
-	rightChart, err := loader.LoadArchive(rightFile)
-	if err != nil {
-		return false, err
+		return "", fmt.Errorf("failed to load archive: %w", err)
 	}
 
-	for annotation := range leftChart.Metadata.Annotations {
+	// Do not consider changes to partner-charts-specific chart annotations
+	for annotation := range upstreamChart.Metadata.Annotations {
 		if strings.HasPrefix(annotation, "catalog.cattle.io") {
-			delete(leftChart.Metadata.Annotations, annotation)
+			delete(upstreamChart.Metadata.Annotations, annotation)
 		}
 	}
 
-	for annotation := range rightChart.Metadata.Annotations {
-		if strings.HasPrefix(annotation, "catalog.cattle.io") {
-			delete(rightChart.Metadata.Annotations, annotation)
-		}
-	}
+	// Do not consider changes to the Chart.yaml deprecated field
+	upstreamChart.Metadata.Deprecated = false
 
-	tempDir, err := os.MkdirTemp(os.TempDir(), "chartValidate")
+	chartDirectory, err := os.MkdirTemp("", "partner-charts-ci-validate-")
 	if err != nil {
-		return false, err
+		return "", fmt.Errorf("failed to create temporary directory: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
 
-	leftOut := path.Join(tempDir, "left")
-	rightOut := path.Join(tempDir, "right")
+	if err = conform.ExportChartDirectory(upstreamChart, chartDirectory); err != nil {
+		return "", fmt.Errorf("failed to export chart directory: %w", err)
+	}
 
-	err = conform.ExportChartDirectory(leftChart, leftOut)
+	return chartDirectory, nil
+}
+
+func matchHelmCharts(upstreamPath, updatePath string) (bool, error) {
+	upstreamChartDirectory, err := prepareTgzForComparison(upstreamPath)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to prepare %s for comparison: %w", upstreamPath, err)
 	}
+	defer os.RemoveAll(upstreamChartDirectory)
 
-	err = conform.ExportChartDirectory(rightChart, rightOut)
+	updateChartDirectory, err := prepareTgzForComparison(updatePath)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to prepare %s for comparison: %w", updatePath, err)
 	}
+	defer os.RemoveAll(updateChartDirectory)
 
-	directoryComparison, err := CompareDirectories(leftOut, rightOut)
+	directoryComparison, err := CompareDirectories(upstreamChartDirectory, updateChartDirectory)
+	if err != nil {
+		return false, fmt.Errorf("failed to compare directories: %w", err)
+	}
 
 	return directoryComparison.Match(), err
 }
