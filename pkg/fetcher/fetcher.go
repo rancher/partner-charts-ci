@@ -50,8 +50,8 @@ type ChartSourceMetadata struct {
 
 // Constructs Chart Metadata for latest version published to Helm Repository
 func fetchUpstreamHelmrepo(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceMetadata, error) {
-	upstreamYaml.HelmRepoUrl = strings.TrimSuffix(upstreamYaml.HelmRepoUrl, "/")
-	url := fmt.Sprintf("%s/index.yaml", upstreamYaml.HelmRepoUrl)
+	upstreamYaml.HelmRepo = strings.TrimSuffix(upstreamYaml.HelmRepo, "/")
+	url := fmt.Sprintf("%s/index.yaml", upstreamYaml.HelmRepo)
 
 	indexYaml := repo.NewIndexFile()
 	chartSourceMeta := ChartSourceMetadata{}
@@ -77,7 +77,7 @@ func fetchUpstreamHelmrepo(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceM
 		return chartSourceMeta, err
 	}
 	if _, ok := indexYaml.Entries[upstreamYaml.HelmChart]; !ok {
-		return chartSourceMeta, fmt.Errorf("Helm chart: %s/%s not found", upstreamYaml.HelmRepoUrl, upstreamYaml.HelmChart)
+		return chartSourceMeta, fmt.Errorf("Helm chart: %s/%s not found", upstreamYaml.HelmRepo, upstreamYaml.HelmChart)
 	}
 
 	indexYaml.SortEntries()
@@ -86,7 +86,7 @@ func fetchUpstreamHelmrepo(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceM
 	for i := range upstreamVersions {
 		chartUrl := upstreamVersions[i].URLs[0]
 		if !strings.HasPrefix(chartUrl, "http") {
-			upstreamVersions[i].URLs[0] = upstreamYaml.HelmRepoUrl + "/" + chartUrl
+			upstreamVersions[i].URLs[0] = upstreamYaml.HelmRepo + "/" + chartUrl
 		}
 	}
 
@@ -120,7 +120,7 @@ func fetchUpstreamArtifacthub(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSour
 		return ChartSourceMetadata{}, fmt.Errorf("ArtifactHub package: %s/%s not found", upstreamYaml.ArtifactHubRepo, upstreamYaml.ArtifactHubPackage)
 	}
 
-	upstreamYaml.HelmRepoUrl = apiResp.Repository.Url
+	upstreamYaml.HelmRepo = apiResp.Repository.Url
 	upstreamYaml.HelmChart = apiResp.Name
 
 	chartSourceMeta, err := fetchUpstreamHelmrepo(upstreamYaml)
@@ -310,7 +310,7 @@ func FetchUpstream(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceMetadata,
 	chartSourceMetadata := ChartSourceMetadata{}
 	if upstreamYaml.ArtifactHubRepo != "" && upstreamYaml.ArtifactHubPackage != "" {
 		chartSourceMetadata, err = fetchUpstreamArtifacthub(upstreamYaml)
-	} else if upstreamYaml.HelmRepoUrl != "" && upstreamYaml.HelmChart != "" {
+	} else if upstreamYaml.HelmRepo != "" && upstreamYaml.HelmChart != "" {
 		chartSourceMetadata, err = fetchUpstreamHelmrepo(upstreamYaml)
 	} else if upstreamYaml.GitRepo != "" {
 		chartSourceMetadata, err = fetchUpstreamGit(upstreamYaml)

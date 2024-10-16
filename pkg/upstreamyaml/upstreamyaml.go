@@ -29,7 +29,7 @@ type UpstreamYaml struct {
 	GitRepo            string         `json:"GitRepo,omitempty"`
 	GitSubdirectory    string         `json:"GitSubdirectory,omitempty"`
 	HelmChart          string         `json:"HelmChart,omitempty"`
-	HelmRepoUrl        string         `json:"HelmRepo,omitempty"`
+	HelmRepo           string         `json:"HelmRepo,omitempty"`
 	Hidden             bool           `json:"Hidden,omitempty"`
 	Namespace          string         `json:"Namespace,omitempty"`
 	PackageVersion     int            `json:"PackageVersion,omitempty"`
