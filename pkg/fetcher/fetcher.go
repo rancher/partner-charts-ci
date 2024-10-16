@@ -97,7 +97,7 @@ func fetchUpstreamHelmrepo(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceM
 
 // Constructs Chart Metadata for latest version published to ArtifactHub
 func fetchUpstreamArtifacthub(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceMetadata, error) {
-	url := fmt.Sprintf("%s/%s/%s", artifactHubApi, upstreamYaml.AHRepoName, upstreamYaml.ArtifactHubPackage)
+	url := fmt.Sprintf("%s/%s/%s", artifactHubApi, upstreamYaml.ArtifactHubRepo, upstreamYaml.ArtifactHubPackage)
 
 	apiResp := ArtifactHubApiHelm{}
 
@@ -117,7 +117,7 @@ func fetchUpstreamArtifacthub(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSour
 	}
 
 	if apiResp.ContentUrl == "" {
-		return ChartSourceMetadata{}, fmt.Errorf("ArtifactHub package: %s/%s not found", upstreamYaml.AHRepoName, upstreamYaml.ArtifactHubPackage)
+		return ChartSourceMetadata{}, fmt.Errorf("ArtifactHub package: %s/%s not found", upstreamYaml.ArtifactHubRepo, upstreamYaml.ArtifactHubPackage)
 	}
 
 	upstreamYaml.HelmRepoUrl = apiResp.Repository.Url
@@ -308,7 +308,7 @@ func fetchUpstreamGit(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceMetada
 func FetchUpstream(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceMetadata, error) {
 	var err error
 	chartSourceMetadata := ChartSourceMetadata{}
-	if upstreamYaml.AHRepoName != "" && upstreamYaml.ArtifactHubPackage != "" {
+	if upstreamYaml.ArtifactHubRepo != "" && upstreamYaml.ArtifactHubPackage != "" {
 		chartSourceMetadata, err = fetchUpstreamArtifacthub(upstreamYaml)
 	} else if upstreamYaml.HelmRepoUrl != "" && upstreamYaml.HelmChart != "" {
 		chartSourceMetadata, err = fetchUpstreamHelmrepo(upstreamYaml)

@@ -17,7 +17,7 @@ const (
 
 type UpstreamYaml struct {
 	ArtifactHubPackage string         `json:"ArtifactHubPackage,omitempty"`
-	AHRepoName         string         `json:"ArtifactHubRepo,omitempty"`
+	ArtifactHubRepo    string         `json:"ArtifactHubRepo,omitempty"`
 	AutoInstall        string         `json:"AutoInstall,omitempty"`
 	ChartYaml          chart.Metadata `json:"ChartMetadata,omitempty"`
 	Deprecated         bool           `json:"Deprecated,omitempty"`
