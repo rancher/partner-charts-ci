@@ -19,7 +19,7 @@ type UpstreamYaml struct {
 	ArtifactHubPackage string         `json:"ArtifactHubPackage,omitempty"`
 	ArtifactHubRepo    string         `json:"ArtifactHubRepo,omitempty"`
 	AutoInstall        string         `json:"AutoInstall,omitempty"`
-	ChartYaml          chart.Metadata `json:"ChartMetadata,omitempty"`
+	ChartMetadata      chart.Metadata `json:"ChartMetadata,omitempty"`
 	Deprecated         bool           `json:"Deprecated,omitempty"`
 	DisplayName        string         `json:"DisplayName,omitempty"`
 	Experimental       bool           `json:"Experimental,omitempty"`

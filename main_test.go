@@ -264,7 +264,7 @@ func TestMain(t *testing.T) {
 			for _, testCase := range testCases {
 				packageWrapper := PackageWrapper{
 					UpstreamYaml: &upstreamyaml.UpstreamYaml{
-						ChartYaml: chart.Metadata{
+						ChartMetadata: chart.Metadata{
 							KubeVersion: testCase.UpstreamYamlKubeVersion,
 						},
 					},

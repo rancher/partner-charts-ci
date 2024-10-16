@@ -319,9 +319,9 @@ func FetchUpstream(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceMetadata,
 		return ChartSourceMetadata{}, err
 	}
 
-	if upstreamYaml.ChartYaml.Name != "" {
+	if upstreamYaml.ChartMetadata.Name != "" {
 		for _, version := range chartSourceMetadata.Versions {
-			version.Name = upstreamYaml.ChartYaml.Name
+			version.Name = upstreamYaml.ChartMetadata.Name
 		}
 	}
 
