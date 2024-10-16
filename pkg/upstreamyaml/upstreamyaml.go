@@ -53,7 +53,7 @@ func Parse(packagePath string) (UpstreamYaml, error) {
 	return upstreamYaml, err
 }
 
-func WriteUpstreamYaml(packagePath string, upstreamYaml UpstreamYaml) error {
+func Write(packagePath string, upstreamYaml UpstreamYaml) error {
 	upstreamYamlPath := filepath.Join(packagePath, UpstreamOptionsFile)
 	logrus.Debugf("Attempting to write %s", upstreamYamlPath)
 	contents, err := yaml.Marshal(upstreamYaml)
