@@ -26,7 +26,7 @@ type UpstreamYaml struct {
 	Fetch              string         `json:"Fetch,omitempty"`
 	GitBranch          string         `json:"GitBranch,omitempty"`
 	GitHubRelease      bool           `json:"GitHubRelease,omitempty"`
-	GitRepoUrl         string         `json:"GitRepo,omitempty"`
+	GitRepo            string         `json:"GitRepo,omitempty"`
 	GitSubDirectory    string         `json:"GitSubdirectory,omitempty"`
 	HelmChart          string         `json:"HelmChart,omitempty"`
 	HelmRepoUrl        string         `json:"HelmRepo,omitempty"`

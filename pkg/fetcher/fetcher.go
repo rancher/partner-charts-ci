@@ -238,14 +238,14 @@ func gitCheckoutCommit(path, commit string) error {
 func fetchUpstreamGit(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceMetadata, error) {
 	var upstreamCommit string
 
-	clonePath, err := gitCloneToDirectory(upstreamYaml.GitRepoUrl, upstreamYaml.GitBranch, !upstreamYaml.GitHubRelease)
+	clonePath, err := gitCloneToDirectory(upstreamYaml.GitRepo, upstreamYaml.GitBranch, !upstreamYaml.GitHubRelease)
 	if err != nil {
 		return ChartSourceMetadata{}, err
 	}
 
 	if upstreamYaml.GitHubRelease {
 		logrus.Debug("Fetching GitHub Release")
-		upstreamCommit, err = fetchGitHubRelease(upstreamYaml.GitRepoUrl)
+		upstreamCommit, err = fetchGitHubRelease(upstreamYaml.GitRepo)
 		if err != nil {
 			return ChartSourceMetadata{}, err
 		}
@@ -285,7 +285,7 @@ func fetchUpstreamGit(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceMetada
 
 	version := repo.ChartVersion{
 		Metadata: helmChart.Metadata,
-		URLs:     []string{upstreamYaml.GitRepoUrl},
+		URLs:     []string{upstreamYaml.GitRepo},
 	}
 
 	versions := repo.ChartVersions{&version}
@@ -312,7 +312,7 @@ func FetchUpstream(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceMetadata,
 		chartSourceMetadata, err = fetchUpstreamArtifacthub(upstreamYaml)
 	} else if upstreamYaml.HelmRepoUrl != "" && upstreamYaml.HelmChart != "" {
 		chartSourceMetadata, err = fetchUpstreamHelmrepo(upstreamYaml)
-	} else if upstreamYaml.GitRepoUrl != "" {
+	} else if upstreamYaml.GitRepo != "" {
 		chartSourceMetadata, err = fetchUpstreamGit(upstreamYaml)
 	} else {
 		err := errors.New("no valid repo options found")
