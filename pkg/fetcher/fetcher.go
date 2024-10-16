@@ -270,10 +270,10 @@ func fetchUpstreamGit(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceMetada
 	}
 
 	chartPath := clonePath
-	if upstreamYaml.GitSubDirectory != "" {
-		chartPath = filepath.Join(clonePath, upstreamYaml.GitSubDirectory)
+	if upstreamYaml.GitSubdirectory != "" {
+		chartPath = filepath.Join(clonePath, upstreamYaml.GitSubdirectory)
 		if _, err := os.Stat(chartPath); os.IsNotExist(err) {
-			err = fmt.Errorf("git subdirectory '%s' does not exist", upstreamYaml.GitSubDirectory)
+			err = fmt.Errorf("git subdirectory '%s' does not exist", upstreamYaml.GitSubdirectory)
 			return ChartSourceMetadata{}, err
 		}
 	}
@@ -293,7 +293,7 @@ func fetchUpstreamGit(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceMetada
 	chartSourceMeta := ChartSourceMetadata{
 		Commit:       upstreamCommit,
 		Source:       "Git",
-		SubDirectory: upstreamYaml.GitSubDirectory,
+		SubDirectory: upstreamYaml.GitSubdirectory,
 		Versions:     versions,
 	}
 
