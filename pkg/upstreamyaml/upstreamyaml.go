@@ -118,7 +118,7 @@ func Parse(upstreamYamlPath string) (*UpstreamYaml, error) {
 	return upstreamYaml, nil
 }
 
-func Write(upstreamYamlPath string, upstreamYaml UpstreamYaml) error {
+func Write(upstreamYamlPath string, upstreamYaml *UpstreamYaml) error {
 	logrus.Debugf("Attempting to write %s", upstreamYamlPath)
 	contents, err := yaml.Marshal(upstreamYaml)
 	if err != nil {
