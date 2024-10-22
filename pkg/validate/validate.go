@@ -14,25 +14,17 @@ import (
 	"github.com/rancher/partner-charts-ci/pkg/conform"
 	"github.com/sirupsen/logrus"
 	"helm.sh/helm/v3/pkg/chart/loader"
-
-	"sigs.k8s.io/yaml"
 )
-
-type ConfigurationYaml struct {
-	Validate []ValidateUpstream
-}
-
-type ValidateUpstream struct {
-	Url    string
-	Branch string
-}
 
 type DirectoryComparison struct {
 	Unchanged []string
 	Modified  []string
 	Added     []string
 	Removed   []string
-	Match     bool
+}
+
+func (directoryComparison *DirectoryComparison) Match() bool {
+	return len(directoryComparison.Modified)+len(directoryComparison.Added)+len(directoryComparison.Removed) == 0
 }
 
 func (directoryComparison *DirectoryComparison) Merge(newComparison DirectoryComparison) {
@@ -40,23 +32,6 @@ func (directoryComparison *DirectoryComparison) Merge(newComparison DirectoryCom
 	directoryComparison.Modified = append(directoryComparison.Modified, newComparison.Modified...)
 	directoryComparison.Added = append(directoryComparison.Added, newComparison.Added...)
 	directoryComparison.Removed = append(directoryComparison.Removed, newComparison.Removed...)
-
-	if !newComparison.Match {
-		directoryComparison.Match = false
-	}
-
-}
-
-func ReadConfig(configYamlPath string) (ConfigurationYaml, error) {
-	upstreamYamlFile, err := os.ReadFile(configYamlPath)
-	configYaml := ConfigurationYaml{}
-	if err != nil {
-		logrus.Debug(err)
-	} else {
-		err = yaml.Unmarshal(upstreamYamlFile, &configYaml)
-	}
-
-	return configYaml, err
 }
 
 func CloneRepo(url string, branch string, targetDir string) error {
@@ -93,146 +68,142 @@ func ChecksumFile(filePath string) (string, error) {
 	return hash, nil
 }
 
-func CompareDirectories(leftPath, rightPath string, exclude map[string]struct{}) (DirectoryComparison, error) {
-	logrus.Debugf("Comparing directories %s and %s", leftPath, rightPath)
-	directoryComparison := DirectoryComparison{
-		Match: true,
-	}
+func CompareDirectories(upstreamPath, updatePath string) (DirectoryComparison, error) {
+	logrus.Debugf("Comparing directories %s and %s", upstreamPath, updatePath)
+	directoryComparison := DirectoryComparison{}
 	checkedSet := make(map[string]struct{})
 	var checked = struct{}{}
 
-	if _, err := os.Stat(leftPath); os.IsNotExist(err) {
+	if _, err := os.Stat(upstreamPath); os.IsNotExist(err) {
 		return directoryComparison, err
 	}
-	if _, err := os.Stat(rightPath); os.IsNotExist(err) {
+	if _, err := os.Stat(updatePath); os.IsNotExist(err) {
 		return directoryComparison, err
 	}
 
-	compareLeft := func(filePath string, info os.FileInfo, err error) error {
+	findRemovalAndModification := func(upstreamFilePath string, info os.FileInfo, err error) error {
 		if err != nil {
-			logrus.Error(err)
+			return err
 		}
-		relativePath := strings.TrimPrefix(filePath, leftPath)
+		relativePath := strings.TrimPrefix(upstreamFilePath, upstreamPath)
 		checkedSet[relativePath] = checked
 
-		if _, ok := exclude[info.Name()]; !ok && !info.IsDir() {
-			rightFilePath := path.Join(rightPath, relativePath)
-			if _, err := os.Stat(rightFilePath); os.IsNotExist(err) {
-				directoryComparison.Removed = append(directoryComparison.Removed, relativePath)
-				return nil
-			}
-			leftCheckSum, err := ChecksumFile(filePath)
-			if err != nil {
-				logrus.Error(err)
-			}
-			rightCheckSum, err := ChecksumFile(rightFilePath)
-			if err != nil {
-				logrus.Error(err)
-			}
-
-			if leftCheckSum != rightCheckSum && strings.HasSuffix(filePath, ".tgz") {
-				chartMatch, err := matchHelmCharts(filePath, rightFilePath)
-				if chartMatch {
-					directoryComparison.Unchanged = append(directoryComparison.Unchanged, relativePath)
-				} else {
-					directoryComparison.Modified = append(directoryComparison.Modified, relativePath)
-				}
-				if err != nil {
-					logrus.Debug(err)
-				}
-			} else if leftCheckSum != rightCheckSum {
-				directoryComparison.Modified = append(directoryComparison.Modified, relativePath)
-			} else {
-				directoryComparison.Unchanged = append(directoryComparison.Unchanged, relativePath)
-			}
+		if info.IsDir() {
+			return nil
 		}
 
-		return nil
-	}
-
-	compareRight := func(filePath string, info os.FileInfo, err error) error {
+		updateFilePath := path.Join(updatePath, relativePath)
+		if _, err := os.Stat(updateFilePath); os.IsNotExist(err) {
+			directoryComparison.Removed = append(directoryComparison.Removed, updateFilePath)
+			return nil
+		}
+		leftCheckSum, err := ChecksumFile(upstreamFilePath)
 		if err != nil {
 			logrus.Error(err)
 		}
-		relativePath := strings.TrimPrefix(filePath, rightPath)
+		rightCheckSum, err := ChecksumFile(updateFilePath)
+		if err != nil {
+			logrus.Error(err)
+		}
 
-		if _, ok := checkedSet[relativePath]; !ok && !info.IsDir() {
-			directoryComparison.Added = append(directoryComparison.Added, relativePath)
+		if leftCheckSum != rightCheckSum && strings.HasSuffix(upstreamFilePath, ".tgz") {
+			chartMatch, err := matchHelmCharts(upstreamFilePath, updateFilePath)
+			if chartMatch {
+				directoryComparison.Unchanged = append(directoryComparison.Unchanged, updateFilePath)
+			} else {
+				directoryComparison.Modified = append(directoryComparison.Modified, updateFilePath)
+			}
+			if err != nil {
+				logrus.Debug(err)
+			}
+		} else if leftCheckSum != rightCheckSum {
+			directoryComparison.Modified = append(directoryComparison.Modified, updateFilePath)
+		} else {
+			directoryComparison.Unchanged = append(directoryComparison.Unchanged, updateFilePath)
 		}
 
 		return nil
 	}
 
-	if err := filepath.Walk(leftPath, compareLeft); err != nil {
-		return DirectoryComparison{}, fmt.Errorf("failed while walking %q: %w", leftPath, err)
-	}
-	if err := filepath.Walk(rightPath, compareRight); err != nil {
-		return DirectoryComparison{}, fmt.Errorf("failed while walking %q: %w", rightPath, err)
+	findAddition := func(updateFilePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		relativePath := strings.TrimPrefix(updateFilePath, updatePath)
+
+		if _, ok := checkedSet[relativePath]; !ok && !info.IsDir() {
+			directoryComparison.Added = append(directoryComparison.Added, updateFilePath)
+		}
+
+		return nil
 	}
 
-	if len(directoryComparison.Modified)+len(directoryComparison.Added)+len(directoryComparison.Removed) > 0 {
-		directoryComparison.Match = false
+	if err := filepath.Walk(upstreamPath, findRemovalAndModification); err != nil {
+		return DirectoryComparison{}, fmt.Errorf("failed to search %q for removed or modified files: %w", upstreamPath, err)
+	}
+	if err := filepath.Walk(updatePath, findAddition); err != nil {
+		return DirectoryComparison{}, fmt.Errorf("failed to search %q for added files: %w", updatePath, err)
 	}
 
 	return directoryComparison, nil
 }
 
-func matchHelmCharts(leftPath, rightPath string) (bool, error) {
-	leftFile, err := os.Open(leftPath)
+// prepareTgzForComparison takes a path to a .tgz helm chart. It unpacks this
+// helm chart, applies modifications to it that cause the validation process
+// to ignore certain changes, and exports it to a temporary chart directory.
+// The caller is responsible for removing the chart directory after they are
+// finished using it.
+func prepareTgzForComparison(tgzPath string) (string, error) {
+	upstreamFile, err := os.Open(tgzPath)
 	if err != nil {
-		return false, err
+		return "", fmt.Errorf("failed to open file: %w", err)
 	}
-	defer leftFile.Close()
+	defer upstreamFile.Close()
 
-	rightFile, err := os.Open(rightPath)
+	upstreamChart, err := loader.LoadArchive(upstreamFile)
 	if err != nil {
-		return false, err
-	}
-	defer rightFile.Close()
-
-	leftChart, err := loader.LoadArchive(leftFile)
-	if err != nil {
-		return false, err
-	}
-
-	rightChart, err := loader.LoadArchive(rightFile)
-	if err != nil {
-		return false, err
+		return "", fmt.Errorf("failed to load archive: %w", err)
 	}
 
-	for annotation := range leftChart.Metadata.Annotations {
+	// Do not consider changes to partner-charts-specific chart annotations
+	for annotation := range upstreamChart.Metadata.Annotations {
 		if strings.HasPrefix(annotation, "catalog.cattle.io") {
-			delete(leftChart.Metadata.Annotations, annotation)
+			delete(upstreamChart.Metadata.Annotations, annotation)
 		}
 	}
 
-	for annotation := range rightChart.Metadata.Annotations {
-		if strings.HasPrefix(annotation, "catalog.cattle.io") {
-			delete(rightChart.Metadata.Annotations, annotation)
-		}
-	}
+	// Do not consider changes to the Chart.yaml deprecated field
+	upstreamChart.Metadata.Deprecated = false
 
-	tempDir, err := os.MkdirTemp(os.TempDir(), "chartValidate")
+	chartDirectory, err := os.MkdirTemp("", "partner-charts-ci-validate-")
 	if err != nil {
-		return false, err
+		return "", fmt.Errorf("failed to create temporary directory: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
 
-	leftOut := path.Join(tempDir, "left")
-	rightOut := path.Join(tempDir, "right")
+	if err = conform.ExportChartDirectory(upstreamChart, chartDirectory); err != nil {
+		return "", fmt.Errorf("failed to export chart directory: %w", err)
+	}
 
-	err = conform.ExportChartDirectory(leftChart, leftOut)
+	return chartDirectory, nil
+}
+
+func matchHelmCharts(upstreamPath, updatePath string) (bool, error) {
+	upstreamChartDirectory, err := prepareTgzForComparison(upstreamPath)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to prepare %s for comparison: %w", upstreamPath, err)
 	}
+	defer os.RemoveAll(upstreamChartDirectory)
 
-	err = conform.ExportChartDirectory(rightChart, rightOut)
+	updateChartDirectory, err := prepareTgzForComparison(updatePath)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to prepare %s for comparison: %w", updatePath, err)
+	}
+	defer os.RemoveAll(updateChartDirectory)
+
+	directoryComparison, err := CompareDirectories(upstreamChartDirectory, updateChartDirectory)
+	if err != nil {
+		return false, fmt.Errorf("failed to compare directories: %w", err)
 	}
 
-	directoryComparison, err := CompareDirectories(leftOut, rightOut, map[string]struct{}{})
-
-	return directoryComparison.Match, err
-
+	return directoryComparison.Match(), err
 }

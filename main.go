@@ -1281,37 +1281,25 @@ func autoUpdate(c *cli.Context) {
 
 // CLI function call - Validates repo against released
 func validateRepo(c *cli.Context) {
-	validatePaths := map[string]validate.DirectoryComparison{
-		"assets": {},
-	}
-
-	excludeFiles := make(map[string]struct{})
-	var exclude = struct{}{}
-	excludeFiles["README.md"] = exclude
-
-	directoryComparison := validate.DirectoryComparison{}
-
 	configYamlPath := path.Join(paths.GetRepoRoot(), configOptionsFile)
 	configYaml, err := validate.ReadConfig(configYamlPath)
 	if err != nil {
 		logrus.Fatalf("failed to read %s: %s\n", configOptionsFile, err)
 	}
 
-	if len(configYaml.Validate) == 0 || configYaml.Validate[0].Branch == "" || configYaml.Validate[0].Url == "" {
-		logrus.Fatal("Invalid validation configuration")
-	}
-
 	cloneDir, err := os.MkdirTemp("", "gitRepo")
 	if err != nil {
 		logrus.Fatal(err)
 	}
+	defer os.RemoveAll(cloneDir)
 
-	err = validate.CloneRepo(configYaml.Validate[0].Url, configYaml.Validate[0].Branch, cloneDir)
+	err = validate.CloneRepo(configYaml.ValidateUpstreams[0].Url, configYaml.ValidateUpstreams[0].Branch, cloneDir)
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
-	for dirPath := range validatePaths {
+	directoryComparison := validate.DirectoryComparison{}
+	for _, dirPath := range []string{"assets"} {
 		upstreamPath := path.Join(cloneDir, dirPath)
 		updatePath := path.Join(paths.GetRepoRoot(), dirPath)
 		if _, err := os.Stat(updatePath); os.IsNotExist(err) {
@@ -1322,61 +1310,57 @@ func validateRepo(c *cli.Context) {
 			logrus.Infof("Directory '%s' not in upstream. Skipping...", dirPath)
 			continue
 		}
-		newComparison, err := validate.CompareDirectories(upstreamPath, updatePath, excludeFiles)
+		newComparison, err := validate.CompareDirectories(upstreamPath, updatePath)
 		if err != nil {
 			logrus.Error(err)
 		}
 		directoryComparison.Merge(newComparison)
-		validatePaths[dirPath] = newComparison
 	}
 
-	err = os.RemoveAll(cloneDir)
-	if err != nil {
-		logrus.Error(err)
-	}
+	reportValidation(directoryComparison)
+
+	logrus.Infof("Successfully validated\n  Upstream: %s\n  Branch: %s\n",
+		configYaml.ValidateUpstreams[0].Url, configYaml.ValidateUpstreams[0].Branch)
+}
+
+func reportValidation(directoryComparison validate.DirectoryComparison) {
+	repoRoot := paths.GetRepoRoot()
 
 	if len(directoryComparison.Added) > 0 {
-		outString := ""
-		for dirPath := range validatePaths {
-			if len(validatePaths[dirPath].Added) > 0 {
-				outString += fmt.Sprintf("\n - %s", dirPath)
-				stringJoiner := fmt.Sprintf("\n - %s", dirPath)
-				fileList := strings.Join(validatePaths[dirPath].Added[:], stringJoiner)
-				outString += fileList
+		outString := "Files Added:"
+		for _, addedPath := range directoryComparison.Added {
+			relativePath, err := filepath.Rel(repoRoot, addedPath)
+			if err != nil {
+				logrus.Fatalf("failed to get path of %s relative to %s", addedPath, repoRoot)
 			}
+			outString += fmt.Sprintf("\n - %s", relativePath)
 		}
-		logrus.Infof("Files Added:%s", outString)
+		logrus.Info(outString)
 	}
 
 	if len(directoryComparison.Removed) > 0 {
-		outString := ""
-		for dirPath := range validatePaths {
-			if len(validatePaths[dirPath].Removed) > 0 {
-				outString += fmt.Sprintf("\n - %s", dirPath)
-				stringJoiner := fmt.Sprintf("\n - %s", dirPath)
-				fileList := strings.Join(validatePaths[dirPath].Removed[:], stringJoiner)
-				outString += fileList
+		outString := "Files Removed:"
+		for _, removedPath := range directoryComparison.Removed {
+			relativePath, err := filepath.Rel(repoRoot, removedPath)
+			if err != nil {
+				logrus.Fatalf("failed to get path of %s relative to %s", removedPath, repoRoot)
 			}
+			outString += fmt.Sprintf("\n - %s", relativePath)
 		}
-		logrus.Warnf("Files Removed:%s", outString)
+		logrus.Warn(outString)
 	}
 
 	if len(directoryComparison.Modified) > 0 {
-		outString := ""
-		for dirPath := range validatePaths {
-			if len(validatePaths[dirPath].Modified) > 0 {
-				outString += fmt.Sprintf("\n - %s", dirPath)
-				stringJoiner := fmt.Sprintf("\n - %s", dirPath)
-				fileList := strings.Join(validatePaths[dirPath].Modified[:], stringJoiner)
-				outString += fileList
+		outString := "Files Modified:"
+		for _, modifiedPath := range directoryComparison.Modified {
+			relativePath, err := filepath.Rel(repoRoot, modifiedPath)
+			if err != nil {
+				logrus.Fatalf("failed to get path of %s relative to %s", modifiedPath, repoRoot)
 			}
+			outString += fmt.Sprintf("\n - %s", relativePath)
 		}
-		logrus.Fatalf("Files Modified:%s", outString)
+		logrus.Fatal(outString)
 	}
-
-	logrus.Infof("Successfully validated\n  Upstream: %s\n  Branch: %s\n",
-		configYaml.Validate[0].Url, configYaml.Validate[0].Branch)
-
 }
 
 // cullCharts removes chart versions that are older than the passed number of
