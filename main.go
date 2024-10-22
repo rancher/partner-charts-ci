@@ -18,8 +18,8 @@ import (
 	"github.com/rancher/partner-charts-ci/pkg/conform"
 	"github.com/rancher/partner-charts-ci/pkg/fetcher"
 	"github.com/rancher/partner-charts-ci/pkg/icons"
-	"github.com/rancher/partner-charts-ci/pkg/parse"
 	"github.com/rancher/partner-charts-ci/pkg/paths"
+	"github.com/rancher/partner-charts-ci/pkg/upstreamyaml"
 	"github.com/rancher/partner-charts-ci/pkg/validate"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -52,6 +52,7 @@ const (
 	repositoryPackagesDir = "packages"
 	configOptionsFile     = "configuration.yaml"
 	featuredMax           = 5
+	upstreamYamlFile      = "upstream.yaml"
 )
 
 var (
@@ -95,7 +96,7 @@ type PackageWrapper struct {
 	// SourceMetadata represents metadata fetched from the upstream repository
 	SourceMetadata *fetcher.ChartSourceMetadata
 	// The package's upstream.yaml file
-	UpstreamYaml *parse.UpstreamYaml
+	UpstreamYaml *upstreamyaml.UpstreamYaml
 	// The user-facing (i.e. pretty) chart vendor name
 	DisplayVendor string
 	// The developer-facing chart vendor name
@@ -661,7 +662,7 @@ func integrateCharts(packageWrapper PackageWrapper, existingCharts, newCharts []
 		if err := applyOverlayFiles(overlayFiles, newChart.Chart); err != nil {
 			return fmt.Errorf("failed to apply overlay files to chart %q version %q: %w", newChart.Name(), newChart.Metadata.Version, err)
 		}
-		conform.OverlayChartMetadata(newChart.Chart, packageWrapper.UpstreamYaml.ChartYaml)
+		conform.OverlayChartMetadata(newChart.Chart, packageWrapper.UpstreamYaml.ChartMetadata)
 		if err := addAnnotations(packageWrapper, newChart.Chart); err != nil {
 			return fmt.Errorf("failed to add annotations to chart %q version %q: %w", newChart.Name(), newChart.Metadata.Version, err)
 		}
@@ -738,18 +739,14 @@ func addAnnotations(packageWrapper PackageWrapper, helmChart *chart.Chart) error
 
 	annotations[annotationDisplayName] = packageWrapper.DisplayName
 
-	if packageWrapper.UpstreamYaml.ReleaseName != "" {
-		annotations[annotationReleaseName] = packageWrapper.UpstreamYaml.ReleaseName
-	} else {
-		annotations[annotationReleaseName] = packageWrapper.Name
-	}
+	annotations[annotationReleaseName] = packageWrapper.UpstreamYaml.ReleaseName
 
 	if packageWrapper.UpstreamYaml.Namespace != "" {
 		annotations[annotationNamespace] = packageWrapper.UpstreamYaml.Namespace
 	}
 
-	if packageWrapper.UpstreamYaml.ChartYaml.KubeVersion != "" {
-		annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartYaml.KubeVersion
+	if packageWrapper.UpstreamYaml.ChartMetadata.KubeVersion != "" {
+		annotations[annotationKubeVersion] = packageWrapper.UpstreamYaml.ChartMetadata.KubeVersion
 	} else if helmChart.Metadata.KubeVersion != "" {
 		annotations[annotationKubeVersion] = helmChart.Metadata.KubeVersion
 	}
@@ -982,11 +979,12 @@ func listPackageWrappers(currentPackage string) (PackageList, error) {
 			Name:   parts[2],
 		}
 
-		upstreamYaml, err := parse.ParseUpstreamYaml(packageWrapper.Path)
+		upstreamYamlPath := filepath.Join(packageWrapper.Path, upstreamYamlFile)
+		upstreamYaml, err := upstreamyaml.Parse(upstreamYamlPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse upstream.yaml: %w", err)
 		}
-		packageWrapper.UpstreamYaml = &upstreamYaml
+		packageWrapper.UpstreamYaml = upstreamYaml
 
 		if packageWrapper.UpstreamYaml.Vendor != "" {
 			packageWrapper.DisplayVendor = packageWrapper.UpstreamYaml.Vendor
@@ -1537,7 +1535,8 @@ func deprecatePackage(c *cli.Context) error {
 
 	// set Deprecated: true in upstream.yaml
 	packageWrapper.UpstreamYaml.Deprecated = true
-	if err := parse.WriteUpstreamYaml(packageWrapper.Path, *packageWrapper.UpstreamYaml); err != nil {
+	upstreamYamlPath := filepath.Join(packageWrapper.Path, upstreamYamlFile)
+	if err := upstreamyaml.Write(upstreamYamlPath, *packageWrapper.UpstreamYaml); err != nil {
 		return fmt.Errorf("failed to write upstream.yaml: %w", err)
 	}
 
