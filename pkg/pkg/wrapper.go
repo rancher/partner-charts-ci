@@ -86,7 +86,6 @@ func (packageWrapper *PackageWrapper) Populate() (bool, error) {
 	packageWrapper.FetchVersions, err = filterVersions(
 		packageWrapper.SourceMetadata.Versions,
 		packageWrapper.UpstreamYaml.Fetch,
-		packageWrapper.UpstreamYaml.TrackVersions,
 	)
 	if err != nil {
 		return false, err
@@ -193,35 +192,18 @@ func ListPackageWrappers(currentPackage string) (PackageList, error) {
 	return packageList, nil
 }
 
-func filterVersions(upstreamVersions repo.ChartVersions, fetch string, tracked []string) (repo.ChartVersions, error) {
+func filterVersions(upstreamVersions repo.ChartVersions, fetch string) (repo.ChartVersions, error) {
 	logrus.Debugf("Filtering versions for %s\n", upstreamVersions[0].Name)
 	upstreamVersions = stripPreRelease(upstreamVersions)
-	if len(tracked) > 0 {
-		if newerUntracked := checkNewerUntracked(tracked, upstreamVersions); len(newerUntracked) > 0 {
-			logrus.Warnf("Newer untracked version available: %s (%s)", upstreamVersions[0].Name, strings.Join(newerUntracked, ", "))
-		} else {
-			logrus.Debug("No newer untracked versions found")
-		}
-	}
 	if len(upstreamVersions) == 0 {
 		err := fmt.Errorf("No versions available in upstream or all versions are marked pre-release")
 		return repo.ChartVersions{}, err
 	}
-	filteredVersions := make(repo.ChartVersions, 0)
 	allStoredVersions, err := getStoredVersions(upstreamVersions[0].Name)
-	if len(tracked) > 0 {
-		allTrackedVersions := collectTrackedVersions(upstreamVersions, tracked)
-		storedTrackedVersions := collectTrackedVersions(allStoredVersions, tracked)
-		if err != nil {
-			return filteredVersions, err
-		}
-		for _, trackedVersion := range tracked {
-			nonStoredVersions := collectNonStoredVersions(allTrackedVersions[trackedVersion], storedTrackedVersions[trackedVersion], fetch)
-			filteredVersions = append(filteredVersions, nonStoredVersions...)
-		}
-	} else {
-		filteredVersions = collectNonStoredVersions(upstreamVersions, allStoredVersions, fetch)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stored versions: %w", err)
 	}
+	filteredVersions := collectNonStoredVersions(upstreamVersions, allStoredVersions, fetch)
 
 	return filteredVersions, nil
 }
@@ -240,36 +222,6 @@ func stripPreRelease(versions repo.ChartVersions) repo.ChartVersions {
 	}
 
 	return strippedVersions
-}
-
-func collectTrackedVersions(upstreamVersions repo.ChartVersions, tracked []string) map[string]repo.ChartVersions {
-	trackedVersions := make(map[string]repo.ChartVersions)
-
-	for _, trackedVersion := range tracked {
-		versionList := make(repo.ChartVersions, 0)
-		for _, version := range upstreamVersions {
-			semVer, err := semver.NewVersion(version.Version)
-			if err != nil {
-				logrus.Errorf("%s: %s", version.Version, err)
-				continue
-			}
-			trackedSemVer, err := semver.NewVersion(trackedVersion)
-			if err != nil {
-				logrus.Errorf("%s: %s", version.Version, err)
-				continue
-			}
-			logrus.Debugf("Comparing upstream version %s (%s) to tracked version %s\n", version.Name, version.Version, trackedVersion)
-			if semVer.Major() == trackedSemVer.Major() && semVer.Minor() == trackedSemVer.Minor() {
-				logrus.Debugf("Appending version %s tracking %s\n", version.Version, trackedVersion)
-				versionList = append(versionList, version)
-			} else if semVer.Major() < trackedSemVer.Major() || (semVer.Major() == trackedSemVer.Major() && semVer.Minor() < trackedSemVer.Minor()) {
-				break
-			}
-		}
-		trackedVersions[trackedVersion] = versionList
-	}
-
-	return trackedVersions
 }
 
 func collectNonStoredVersions(versions repo.ChartVersions, storedVersions repo.ChartVersions, fetch string) repo.ChartVersions {
@@ -331,31 +283,6 @@ func collectNonStoredVersions(versions repo.ChartVersions, storedVersions repo.C
 	return nonStoredVersions
 }
 
-func checkNewerUntracked(tracked []string, upstreamVersions repo.ChartVersions) []string {
-	newerUntracked := make([]string, 0)
-	latestTracked := getLatestTracked(tracked)
-	logrus.Debugf("Tracked Versions: %s\n", tracked)
-	logrus.Debugf("Checking for versions newer than latest tracked %s\n", latestTracked)
-	if len(tracked) == 0 {
-		return newerUntracked
-	}
-	for _, upstreamVersion := range upstreamVersions {
-		semVer, err := semver.NewVersion(upstreamVersion.Version)
-		if err != nil {
-			logrus.Error(err)
-		}
-		if semVer.Major() > latestTracked.Major() || (semVer.Major() == latestTracked.Major() && semVer.Minor() > latestTracked.Minor()) {
-			logrus.Debugf("Found version %s newer than latest tracked %s", semVer.String(), latestTracked.String())
-			newerUntracked = append(newerUntracked, semVer.String())
-		} else if semVer.Major() == latestTracked.Major() && semVer.Minor() == latestTracked.Minor() {
-			break
-		}
-	}
-
-	return newerUntracked
-
-}
-
 func getStoredVersions(chartName string) (repo.ChartVersions, error) {
 	storedVersions := repo.ChartVersions{}
 	indexFilePath := filepath.Join(paths.GetRepoRoot(), "index.yaml")
@@ -368,19 +295,4 @@ func getStoredVersions(chartName string) (repo.ChartVersions, error) {
 	}
 
 	return storedVersions, nil
-}
-
-func getLatestTracked(tracked []string) *semver.Version {
-	var latestTracked *semver.Version
-	for _, version := range tracked {
-		semVer, err := semver.NewVersion(version)
-		if err != nil {
-			logrus.Error(err)
-		}
-		if latestTracked == nil || semVer.GreaterThan(latestTracked) {
-			latestTracked = semVer
-		}
-	}
-
-	return latestTracked
 }
