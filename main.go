@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -19,6 +18,7 @@ import (
 	"github.com/rancher/partner-charts-ci/pkg/fetcher"
 	"github.com/rancher/partner-charts-ci/pkg/icons"
 	"github.com/rancher/partner-charts-ci/pkg/paths"
+	"github.com/rancher/partner-charts-ci/pkg/pkg"
 	"github.com/rancher/partner-charts-ci/pkg/upstreamyaml"
 	"github.com/rancher/partner-charts-ci/pkg/validate"
 	"github.com/sirupsen/logrus"
@@ -74,120 +74,6 @@ func NewChartWrapper(helmChart *chart.Chart) *ChartWrapper {
 		Chart:    helmChart,
 		Modified: false,
 	}
-}
-
-// PackageWrapper is the manifestation of the concept of a package,
-// which is configuration that refers to an upstream helm chart plus
-// any local modifications that may be made to those helm charts as
-// they are being integrated into the partner charts repository.
-//
-// PackageWrapper is not called Package because the most obvious name
-// for instances of it would be "package", which conflicts with the
-// "package" golang keyword.
-type PackageWrapper struct {
-	// The developer-facing name of the chart
-	Name string
-	// The user-facing (i.e. pretty) chart name
-	DisplayName string
-	// Filtered subset of versions to be fetched
-	FetchVersions repo.ChartVersions
-	// Path stores the package path in current repository
-	Path string
-	// SourceMetadata represents metadata fetched from the upstream repository
-	SourceMetadata *fetcher.ChartSourceMetadata
-	// The package's upstream.yaml file
-	UpstreamYaml *upstreamyaml.UpstreamYaml
-	// The user-facing (i.e. pretty) chart vendor name
-	DisplayVendor string
-	// The developer-facing chart vendor name
-	Vendor string
-}
-
-type PackageList []PackageWrapper
-
-func (p PackageList) Len() int {
-	return len(p)
-}
-
-func (p PackageList) Swap(i, j int) {
-	p[i], p[j] = p[j], p[i]
-}
-
-func (p PackageList) Less(i, j int) bool {
-	if p[i].SourceMetadata != nil && p[j].SourceMetadata != nil {
-		if p[i].Vendor != p[j].Vendor {
-			return p[i].Vendor < p[j].Vendor
-		}
-		return p[i].Name < p[j].Name
-	}
-
-	return false
-}
-
-func (packageWrapper *PackageWrapper) FullName() string {
-	return packageWrapper.Vendor + "/" + packageWrapper.Name
-}
-
-// Populates PackageWrapper with relevant data from upstream and
-// checks for updates. Returns true if newer package version is
-// available.
-func (packageWrapper *PackageWrapper) Populate() (bool, error) {
-	sourceMetadata, err := fetcher.FetchUpstream(*packageWrapper.UpstreamYaml)
-	if err != nil {
-		return false, fmt.Errorf("failed to fetch data from upstream: %w", err)
-	}
-	if sourceMetadata.Versions[0].Name != packageWrapper.Name {
-		logrus.Warnf("upstream name %q does not match package name %q", sourceMetadata.Versions[0].Name, packageWrapper.Name)
-	}
-	packageWrapper.SourceMetadata = &sourceMetadata
-
-	packageWrapper.FetchVersions, err = filterVersions(
-		packageWrapper.SourceMetadata.Versions,
-		packageWrapper.UpstreamYaml.Fetch,
-		packageWrapper.UpstreamYaml.TrackVersions,
-	)
-	if err != nil {
-		return false, err
-	}
-
-	if len(packageWrapper.FetchVersions) == 0 {
-		return false, nil
-	}
-
-	return true, nil
-}
-
-// GetOverlayFiles returns the package's overlay files as a map where
-// the keys are the path to the file relative to the helm chart root
-// (i.e. Chart.yaml would have the path "Chart.yaml") and the values
-// are the contents of the file.
-func (pw PackageWrapper) GetOverlayFiles() (map[string][]byte, error) {
-	overlayFiles := map[string][]byte{}
-	overlayDir := filepath.Join(pw.Path, "overlay")
-	err := filepath.WalkDir(overlayDir, func(path string, dirEntry fs.DirEntry, err error) error {
-		if errors.Is(err, os.ErrNotExist) {
-			return fs.SkipAll
-		} else if err != nil {
-			return fmt.Errorf("error related to %q: %w", path, err)
-		}
-		if dirEntry.IsDir() {
-			return nil
-		}
-		contents, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("failed to read %q: %w", path, err)
-		}
-		relativePath, err := filepath.Rel(overlayDir, path)
-		if err != nil {
-			return fmt.Errorf("failed to get relative path: %w", err)
-		}
-		overlayFiles[relativePath] = contents
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to walk files: %w", err)
-	}
-	return overlayFiles, nil
 }
 
 func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bool) error {
@@ -255,7 +141,7 @@ func gitCleanup() error {
 }
 
 // Commits changes to index file, assets, charts, and packages
-func commitChanges(updatedList PackageList) error {
+func commitChanges(updatedList pkg.PackageList) error {
 	commitOptions := git.CommitOptions{}
 
 	r, err := git.PlainOpen(paths.GetRepoRoot())
@@ -331,170 +217,7 @@ func commitChanges(updatedList PackageList) error {
 	return nil
 }
 
-func collectTrackedVersions(upstreamVersions repo.ChartVersions, tracked []string) map[string]repo.ChartVersions {
-	trackedVersions := make(map[string]repo.ChartVersions)
-
-	for _, trackedVersion := range tracked {
-		versionList := make(repo.ChartVersions, 0)
-		for _, version := range upstreamVersions {
-			semVer, err := semver.NewVersion(version.Version)
-			if err != nil {
-				logrus.Errorf("%s: %s", version.Version, err)
-				continue
-			}
-			trackedSemVer, err := semver.NewVersion(trackedVersion)
-			if err != nil {
-				logrus.Errorf("%s: %s", version.Version, err)
-				continue
-			}
-			logrus.Debugf("Comparing upstream version %s (%s) to tracked version %s\n", version.Name, version.Version, trackedVersion)
-			if semVer.Major() == trackedSemVer.Major() && semVer.Minor() == trackedSemVer.Minor() {
-				logrus.Debugf("Appending version %s tracking %s\n", version.Version, trackedVersion)
-				versionList = append(versionList, version)
-			} else if semVer.Major() < trackedSemVer.Major() || (semVer.Major() == trackedSemVer.Major() && semVer.Minor() < trackedSemVer.Minor()) {
-				break
-			}
-		}
-		trackedVersions[trackedVersion] = versionList
-	}
-
-	return trackedVersions
-}
-
-func collectNonStoredVersions(versions repo.ChartVersions, storedVersions repo.ChartVersions, fetch string) repo.ChartVersions {
-	nonStoredVersions := make(repo.ChartVersions, 0)
-	for i, version := range versions {
-		parsedVersion, err := semver.NewVersion(version.Version)
-		if err != nil {
-			logrus.Error(err)
-		}
-		stored := false
-		logrus.Debugf("Checking if version %s is stored\n", version.Version)
-		for _, storedVersion := range storedVersions {
-			strippedStoredVersion := conform.StripPackageVersion(storedVersion.Version)
-			if storedVersion.Version == parsedVersion.String() {
-				logrus.Debugf("Found version %s\n", storedVersion.Version)
-				stored = true
-				break
-			} else if strippedStoredVersion == parsedVersion.String() {
-				logrus.Debugf("Found modified version %s\n", storedVersion.Version)
-				stored = true
-				break
-			}
-		}
-		if stored && i == 0 && (strings.ToLower(fetch) == "" || strings.ToLower(fetch) == "latest") {
-			logrus.Debugf("Latest version already stored")
-			break
-		}
-		if !stored {
-			if fetch == strings.ToLower("newer") {
-				var semVer *semver.Version
-				semVer, err := semver.NewVersion(version.Version)
-				if err != nil {
-					logrus.Error(err)
-					continue
-				}
-				if len(storedVersions) > 0 {
-					strippedStoredLatest := conform.StripPackageVersion(storedVersions[0].Version)
-					storedLatestSemVer, err := semver.NewVersion(strippedStoredLatest)
-					if err != nil {
-						logrus.Error(err)
-						continue
-					}
-					if semVer.GreaterThan(storedLatestSemVer) {
-						logrus.Debugf("Version: %s > %s\n", semVer.String(), storedVersions[0].Version)
-						nonStoredVersions = append(nonStoredVersions, version)
-					}
-				} else {
-					nonStoredVersions = append(nonStoredVersions, version)
-				}
-			} else if fetch == strings.ToLower("all") {
-				nonStoredVersions = append(nonStoredVersions, version)
-			} else {
-				nonStoredVersions = append(nonStoredVersions, version)
-				break
-			}
-		}
-	}
-
-	return nonStoredVersions
-}
-
-func stripPreRelease(versions repo.ChartVersions) repo.ChartVersions {
-	strippedVersions := make(repo.ChartVersions, 0)
-	for _, version := range versions {
-		semVer, err := semver.NewVersion(version.Version)
-		if err != nil {
-			logrus.Error(err)
-			continue
-		}
-		if semVer.Prerelease() == "" {
-			strippedVersions = append(strippedVersions, version)
-		}
-	}
-
-	return strippedVersions
-}
-
-func checkNewerUntracked(tracked []string, upstreamVersions repo.ChartVersions) []string {
-	newerUntracked := make([]string, 0)
-	latestTracked := getLatestTracked(tracked)
-	logrus.Debugf("Tracked Versions: %s\n", tracked)
-	logrus.Debugf("Checking for versions newer than latest tracked %s\n", latestTracked)
-	if len(tracked) == 0 {
-		return newerUntracked
-	}
-	for _, upstreamVersion := range upstreamVersions {
-		semVer, err := semver.NewVersion(upstreamVersion.Version)
-		if err != nil {
-			logrus.Error(err)
-		}
-		if semVer.Major() > latestTracked.Major() || (semVer.Major() == latestTracked.Major() && semVer.Minor() > latestTracked.Minor()) {
-			logrus.Debugf("Found version %s newer than latest tracked %s", semVer.String(), latestTracked.String())
-			newerUntracked = append(newerUntracked, semVer.String())
-		} else if semVer.Major() == latestTracked.Major() && semVer.Minor() == latestTracked.Minor() {
-			break
-		}
-	}
-
-	return newerUntracked
-
-}
-
-func filterVersions(upstreamVersions repo.ChartVersions, fetch string, tracked []string) (repo.ChartVersions, error) {
-	logrus.Debugf("Filtering versions for %s\n", upstreamVersions[0].Name)
-	upstreamVersions = stripPreRelease(upstreamVersions)
-	if len(tracked) > 0 {
-		if newerUntracked := checkNewerUntracked(tracked, upstreamVersions); len(newerUntracked) > 0 {
-			logrus.Warnf("Newer untracked version available: %s (%s)", upstreamVersions[0].Name, strings.Join(newerUntracked, ", "))
-		} else {
-			logrus.Debug("No newer untracked versions found")
-		}
-	}
-	if len(upstreamVersions) == 0 {
-		err := fmt.Errorf("No versions available in upstream or all versions are marked pre-release")
-		return repo.ChartVersions{}, err
-	}
-	filteredVersions := make(repo.ChartVersions, 0)
-	allStoredVersions, err := getStoredVersions(upstreamVersions[0].Name)
-	if len(tracked) > 0 {
-		allTrackedVersions := collectTrackedVersions(upstreamVersions, tracked)
-		storedTrackedVersions := collectTrackedVersions(allStoredVersions, tracked)
-		if err != nil {
-			return filteredVersions, err
-		}
-		for _, trackedVersion := range tracked {
-			nonStoredVersions := collectNonStoredVersions(allTrackedVersions[trackedVersion], storedTrackedVersions[trackedVersion], fetch)
-			filteredVersions = append(filteredVersions, nonStoredVersions...)
-		}
-	} else {
-		filteredVersions = collectNonStoredVersions(upstreamVersions, allStoredVersions, fetch)
-	}
-
-	return filteredVersions, nil
-}
-
-func ApplyUpdates(packageWrapper PackageWrapper) error {
+func ApplyUpdates(packageWrapper pkg.PackageWrapper) error {
 	logrus.Debugf("Applying updates for package %s/%s\n", packageWrapper.Vendor, packageWrapper.Name)
 
 	existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
@@ -652,7 +375,7 @@ func getExistingChartTgzFiles(repoRoot string, vendor string, packageName string
 // ensures that the state of all charts, both current and new, is
 // correct. Should never modify an existing chart, except for in
 // the special case of the "featured" annotation.
-func integrateCharts(packageWrapper PackageWrapper, existingCharts, newCharts []*ChartWrapper) error {
+func integrateCharts(packageWrapper pkg.PackageWrapper, existingCharts, newCharts []*ChartWrapper) error {
 	overlayFiles, err := packageWrapper.GetOverlayFiles()
 	if err != nil {
 		return fmt.Errorf("failed to get overlay files: %w", err)
@@ -703,7 +426,7 @@ func applyOverlayFiles(overlayFiles map[string][]byte, helmChart *chart.Chart) e
 // directory, and that the icon URL field for helmChart refers to this local
 // icon file. We do this so that airgap installations of Rancher have access
 // to icons without needing to download them from a remote source.
-func ensureIcon(packageWrapper PackageWrapper, chartWrapper *ChartWrapper) error {
+func ensureIcon(packageWrapper pkg.PackageWrapper, chartWrapper *ChartWrapper) error {
 	localIconPath, err := icons.EnsureIconDownloaded(chartWrapper.Metadata.Icon, packageWrapper.Name)
 	if err != nil {
 		return fmt.Errorf("failed to ensure icon downloaded: %w", err)
@@ -720,7 +443,7 @@ func ensureIcon(packageWrapper PackageWrapper, chartWrapper *ChartWrapper) error
 
 // Sets annotations on helmChart according to values from packageWrapper,
 // and especially from packageWrapper.UpstreamYaml.
-func addAnnotations(packageWrapper PackageWrapper, helmChart *chart.Chart) error {
+func addAnnotations(packageWrapper pkg.PackageWrapper, helmChart *chart.Chart) error {
 	annotations := make(map[string]string)
 
 	if autoInstall := packageWrapper.UpstreamYaml.AutoInstall; autoInstall != "" {
@@ -811,35 +534,6 @@ func ensureFeaturedAnnotation(existingCharts, newCharts []*ChartWrapper) error {
 	}
 
 	return nil
-}
-
-func getLatestTracked(tracked []string) *semver.Version {
-	var latestTracked *semver.Version
-	for _, version := range tracked {
-		semVer, err := semver.NewVersion(version)
-		if err != nil {
-			logrus.Error(err)
-		}
-		if latestTracked == nil || semVer.GreaterThan(latestTracked) {
-			latestTracked = semVer
-		}
-	}
-
-	return latestTracked
-}
-
-func getStoredVersions(chartName string) (repo.ChartVersions, error) {
-	storedVersions := repo.ChartVersions{}
-	indexFilePath := filepath.Join(paths.GetRepoRoot(), indexFile)
-	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
-	if err != nil {
-		return storedVersions, fmt.Errorf("failed to load index file: %w", err)
-	}
-	if val, ok := helmIndexYaml.Entries[chartName]; ok {
-		storedVersions = append(storedVersions, val...)
-	}
-
-	return storedVersions, nil
 }
 
 // getByAnnotation gets all repo.ChartVersions from index.yaml that have
@@ -943,67 +637,6 @@ func writeIndex() error {
 	return nil
 }
 
-// listPackageWrappers reads packages and their upstream.yaml from the packages
-// directory and returns them in a slice. If currentPackage is specified,
-// it must be in <vendor>/<name> format (i.e. the "full" package name).
-// If currentPackage is specified, the function returns a slice with only
-// one element, which is the specified package.
-func listPackageWrappers(currentPackage string) (PackageList, error) {
-	var globPattern string
-	if currentPackage == "" {
-		globPattern = repositoryPackagesDir + "/*/*"
-	} else {
-		globPattern = filepath.Join(repositoryPackagesDir, currentPackage)
-	}
-	matches, err := filepath.Glob(globPattern)
-	if err != nil {
-		return nil, fmt.Errorf("failed to glob for packages")
-	}
-	if currentPackage != "" {
-		if len(matches) == 0 {
-			return nil, fmt.Errorf("failed to find package %q", currentPackage)
-		} else if length := len(matches); length > 1 {
-			return nil, fmt.Errorf("found %d packages for %q, expected 1", length, currentPackage)
-		}
-	}
-
-	packageList := make(PackageList, 0, len(matches))
-	for _, match := range matches {
-		parts := strings.Split(match, "/")
-		if len(parts) != 3 {
-			return nil, fmt.Errorf("failed to split %q into 3 parts", match)
-		}
-		packageWrapper := PackageWrapper{
-			Path:   match,
-			Vendor: parts[1],
-			Name:   parts[2],
-		}
-
-		upstreamYamlPath := filepath.Join(packageWrapper.Path, upstreamYamlFile)
-		upstreamYaml, err := upstreamyaml.Parse(upstreamYamlPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse upstream.yaml: %w", err)
-		}
-		packageWrapper.UpstreamYaml = upstreamYaml
-
-		if packageWrapper.UpstreamYaml.Vendor != "" {
-			packageWrapper.DisplayVendor = packageWrapper.UpstreamYaml.Vendor
-		} else {
-			packageWrapper.DisplayVendor = packageWrapper.Vendor
-		}
-
-		if packageWrapper.UpstreamYaml.DisplayName != "" {
-			packageWrapper.DisplayName = packageWrapper.UpstreamYaml.DisplayName
-		} else {
-			packageWrapper.DisplayName = packageWrapper.Name
-		}
-
-		packageList = append(packageList, packageWrapper)
-	}
-
-	return packageList, nil
-}
-
 // ensureIcons ensures that:
 //  1. Each package has a valid icon file in assets/icons
 //  2. Each chartVersion in index.yaml has its icon URL set to the local
@@ -1011,7 +644,7 @@ func listPackageWrappers(currentPackage string) (PackageList, error) {
 func ensureIcons(c *cli.Context) error {
 	currentPackage := os.Getenv(packageEnvVariable)
 
-	packageWrappers, err := listPackageWrappers(currentPackage)
+	packageWrappers, err := pkg.ListPackageWrappers(currentPackage)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
 	}
@@ -1045,12 +678,12 @@ func ensureIcons(c *cli.Context) error {
 // the changes will be applied on fetchUpstreams function
 func generateChanges(auto bool) {
 	currentPackage := os.Getenv(packageEnvVariable)
-	packageWrappers, err := listPackageWrappers(currentPackage)
+	packageWrappers, err := pkg.ListPackageWrappers(currentPackage)
 	if err != nil {
 		logrus.Fatalf("failed to list packages: %s", err)
 	}
 
-	packageList := make(PackageList, 0, len(packageWrappers))
+	packageList := make(pkg.PackageList, 0, len(packageWrappers))
 	for _, packageWrapper := range packageWrappers {
 		if packageWrapper.UpstreamYaml.Deprecated {
 			logrus.Warnf("Package %s is deprecated; skipping update", packageWrapper.FullName())
@@ -1109,7 +742,7 @@ func generateChanges(auto bool) {
 
 // CLI function call - Prints list of available packages to STDout
 func listPackages(c *cli.Context) error {
-	packageList, err := listPackageWrappers(os.Getenv(packageEnvVariable))
+	packageList, err := pkg.ListPackageWrappers(os.Getenv(packageEnvVariable))
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
 	}
@@ -1147,7 +780,7 @@ func addFeaturedChart(c *cli.Context) error {
 		return fmt.Errorf("featured number must be between %d and %d\n", 1, featuredMax)
 	}
 
-	packageList, err := listPackageWrappers(featuredChart)
+	packageList, err := pkg.ListPackageWrappers(featuredChart)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
 	}
@@ -1179,7 +812,7 @@ func removeFeaturedChart(c *cli.Context) error {
 	}
 	featuredChart := c.Args().Get(0)
 
-	packageList, err := listPackageWrappers(featuredChart)
+	packageList, err := pkg.ListPackageWrappers(featuredChart)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
 	}
@@ -1236,7 +869,7 @@ func hideChart(c *cli.Context) error {
 	}
 	currentPackage := c.Args().Get(0)
 
-	packageWrappers, err := listPackageWrappers(currentPackage)
+	packageWrappers, err := pkg.ListPackageWrappers(currentPackage)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
 	}
@@ -1244,7 +877,8 @@ func hideChart(c *cli.Context) error {
 
 	// set Hidden: true in upstream.yaml
 	packageWrapper.UpstreamYaml.Hidden = true
-	if err := parse.WriteUpstreamYaml(packageWrapper.Path, *packageWrapper.UpstreamYaml); err != nil {
+	upstreamYamlPath := filepath.Join(packageWrapper.Path, upstreamYamlFile)
+	if err := upstreamyaml.Write(upstreamYamlPath, packageWrapper.UpstreamYaml); err != nil {
 		return fmt.Errorf("failed to write upstream.yaml: %w", err)
 	}
 
@@ -1280,87 +914,16 @@ func autoUpdate(c *cli.Context) {
 }
 
 // CLI function call - Validates repo against released
-func validateRepo(c *cli.Context) {
+func validateRepo(c *cli.Context) error {
 	configYamlPath := path.Join(paths.GetRepoRoot(), configOptionsFile)
 	configYaml, err := validate.ReadConfig(configYamlPath)
 	if err != nil {
 		logrus.Fatalf("failed to read %s: %s\n", configOptionsFile, err)
 	}
 
-	cloneDir, err := os.MkdirTemp("", "gitRepo")
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	defer os.RemoveAll(cloneDir)
+	validationErrors := validate.Run(configYaml)
 
-	err = validate.CloneRepo(configYaml.ValidateUpstreams[0].Url, configYaml.ValidateUpstreams[0].Branch, cloneDir)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	directoryComparison := validate.DirectoryComparison{}
-	for _, dirPath := range []string{"assets"} {
-		upstreamPath := path.Join(cloneDir, dirPath)
-		updatePath := path.Join(paths.GetRepoRoot(), dirPath)
-		if _, err := os.Stat(updatePath); os.IsNotExist(err) {
-			logrus.Infof("Directory '%s' not in source. Skipping...", dirPath)
-			continue
-		}
-		if _, err := os.Stat(upstreamPath); os.IsNotExist(err) {
-			logrus.Infof("Directory '%s' not in upstream. Skipping...", dirPath)
-			continue
-		}
-		newComparison, err := validate.CompareDirectories(upstreamPath, updatePath)
-		if err != nil {
-			logrus.Error(err)
-		}
-		directoryComparison.Merge(newComparison)
-	}
-
-	reportValidation(directoryComparison)
-
-	logrus.Infof("Successfully validated\n  Upstream: %s\n  Branch: %s\n",
-		configYaml.ValidateUpstreams[0].Url, configYaml.ValidateUpstreams[0].Branch)
-}
-
-func reportValidation(directoryComparison validate.DirectoryComparison) {
-	repoRoot := paths.GetRepoRoot()
-
-	if len(directoryComparison.Added) > 0 {
-		outString := "Files Added:"
-		for _, addedPath := range directoryComparison.Added {
-			relativePath, err := filepath.Rel(repoRoot, addedPath)
-			if err != nil {
-				logrus.Fatalf("failed to get path of %s relative to %s", addedPath, repoRoot)
-			}
-			outString += fmt.Sprintf("\n - %s", relativePath)
-		}
-		logrus.Info(outString)
-	}
-
-	if len(directoryComparison.Removed) > 0 {
-		outString := "Files Removed:"
-		for _, removedPath := range directoryComparison.Removed {
-			relativePath, err := filepath.Rel(repoRoot, removedPath)
-			if err != nil {
-				logrus.Fatalf("failed to get path of %s relative to %s", removedPath, repoRoot)
-			}
-			outString += fmt.Sprintf("\n - %s", relativePath)
-		}
-		logrus.Warn(outString)
-	}
-
-	if len(directoryComparison.Modified) > 0 {
-		outString := "Files Modified:"
-		for _, modifiedPath := range directoryComparison.Modified {
-			relativePath, err := filepath.Rel(repoRoot, modifiedPath)
-			if err != nil {
-				logrus.Fatalf("failed to get path of %s relative to %s", modifiedPath, repoRoot)
-			}
-			outString += fmt.Sprintf("\n - %s", relativePath)
-		}
-		logrus.Fatal(outString)
-	}
+	return errors.Join(validationErrors...)
 }
 
 // cullCharts removes chart versions that are older than the passed number of
@@ -1368,7 +931,7 @@ func reportValidation(directoryComparison validate.DirectoryComparison) {
 // used to work on a single package.
 func cullCharts(c *cli.Context) error {
 	currentPackage := os.Getenv(packageEnvVariable)
-	packageWrappers, err := listPackageWrappers(currentPackage)
+	packageWrappers, err := pkg.ListPackageWrappers(currentPackage)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
 	}
@@ -1464,7 +1027,7 @@ func removePackage(c *cli.Context) error {
 	}
 	currentPackage := c.Args().Get(0)
 
-	packageWrappers, err := listPackageWrappers(currentPackage)
+	packageWrappers, err := pkg.ListPackageWrappers(currentPackage)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
 	}
@@ -1511,7 +1074,7 @@ func deprecatePackage(c *cli.Context) error {
 	}
 	currentPackage := c.Args().Get(0)
 
-	packageWrappers, err := listPackageWrappers(currentPackage)
+	packageWrappers, err := pkg.ListPackageWrappers(currentPackage)
 	if err != nil {
 		return fmt.Errorf("failed to list package wrappers: %w", err)
 	}
@@ -1520,7 +1083,7 @@ func deprecatePackage(c *cli.Context) error {
 	// set Deprecated: true in upstream.yaml
 	packageWrapper.UpstreamYaml.Deprecated = true
 	upstreamYamlPath := filepath.Join(packageWrapper.Path, upstreamYamlFile)
-	if err := upstreamyaml.Write(upstreamYamlPath, *packageWrapper.UpstreamYaml); err != nil {
+	if err := upstreamyaml.Write(upstreamYamlPath, packageWrapper.UpstreamYaml); err != nil {
 		return fmt.Errorf("failed to write upstream.yaml: %w", err)
 	}
 
