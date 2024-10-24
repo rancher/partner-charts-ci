@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/rancher/partner-charts-ci/pkg/pkg"
 	"github.com/rancher/partner-charts-ci/pkg/upstreamyaml"
 	"github.com/stretchr/testify/assert"
 
@@ -11,31 +12,6 @@ import (
 )
 
 func TestMain(t *testing.T) {
-	t.Run("PackageWrapper", func(t *testing.T) {
-		t.Run("GetOverlayFiles", func(t *testing.T) {
-			t.Run("should parse overlay files properly", func(t *testing.T) {
-				packageWrapper := PackageWrapper{
-					Path: filepath.Join("testdata", "getOverlayFiles"),
-				}
-				actualOverlayFiles, err := packageWrapper.GetOverlayFiles()
-				if err != nil {
-					t.Fatalf("unexpected error: %s", err)
-				}
-				expectedOverlayFiles := map[string][]byte{
-					"file1.txt":                        []byte("this is file 1\n"),
-					"file2.txt":                        []byte("this is file 2\n"),
-					filepath.Join("dir1", "file3.txt"): []byte("this is file 3\n"),
-				}
-				for expectedPath, expectedValue := range expectedOverlayFiles {
-					actualValue, ok := actualOverlayFiles[expectedPath]
-					assert.True(t, ok)
-					assert.Equal(t, expectedValue, actualValue)
-				}
-				assert.Equal(t, len(expectedOverlayFiles), len(actualOverlayFiles))
-			})
-		})
-	})
-
 	t.Run("applyOverlayFiles", func(t *testing.T) {
 		t.Run("should add files that do not already exist", func(t *testing.T) {
 			filename := "file1.txt"
@@ -88,7 +64,7 @@ func TestMain(t *testing.T) {
 	t.Run("addAnnotations", func(t *testing.T) {
 		t.Run("should set auto-install annotation properly", func(t *testing.T) {
 			for _, autoInstall := range []string{"", "some-chart"} {
-				packageWrapper := PackageWrapper{
+				packageWrapper := pkg.PackageWrapper{
 					UpstreamYaml: &upstreamyaml.UpstreamYaml{
 						AutoInstall: autoInstall,
 					},
@@ -111,7 +87,7 @@ func TestMain(t *testing.T) {
 
 		t.Run("should set experimental annotation properly", func(t *testing.T) {
 			for _, experimental := range []bool{false, true} {
-				packageWrapper := PackageWrapper{
+				packageWrapper := pkg.PackageWrapper{
 					UpstreamYaml: &upstreamyaml.UpstreamYaml{
 						Experimental: experimental,
 					},
@@ -134,7 +110,7 @@ func TestMain(t *testing.T) {
 
 		t.Run("should set hidden annotation properly", func(t *testing.T) {
 			for _, hidden := range []bool{false, true} {
-				packageWrapper := PackageWrapper{
+				packageWrapper := pkg.PackageWrapper{
 					UpstreamYaml: &upstreamyaml.UpstreamYaml{
 						Hidden: hidden,
 					},
@@ -156,7 +132,7 @@ func TestMain(t *testing.T) {
 		})
 
 		t.Run("should always set certified annotation", func(t *testing.T) {
-			packageWrapper := PackageWrapper{
+			packageWrapper := pkg.PackageWrapper{
 				UpstreamYaml: &upstreamyaml.UpstreamYaml{},
 			}
 			helmChart := &chart.Chart{
@@ -174,7 +150,7 @@ func TestMain(t *testing.T) {
 
 		t.Run("should always set display-name annotation", func(t *testing.T) {
 			displayName := "Display Name"
-			packageWrapper := PackageWrapper{
+			packageWrapper := pkg.PackageWrapper{
 				DisplayName:  displayName,
 				UpstreamYaml: &upstreamyaml.UpstreamYaml{},
 			}
@@ -193,7 +169,7 @@ func TestMain(t *testing.T) {
 
 		t.Run("should set release-name annotation properly", func(t *testing.T) {
 			releaseName := "Release Name"
-			packageWrapper := PackageWrapper{
+			packageWrapper := pkg.PackageWrapper{
 				UpstreamYaml: &upstreamyaml.UpstreamYaml{
 					ReleaseName: releaseName,
 				},
@@ -213,7 +189,7 @@ func TestMain(t *testing.T) {
 
 		t.Run("should set namespace annotation properly", func(t *testing.T) {
 			for _, namespace := range []string{"", "test-namespace"} {
-				packageWrapper := PackageWrapper{
+				packageWrapper := pkg.PackageWrapper{
 					UpstreamYaml: &upstreamyaml.UpstreamYaml{
 						Namespace: namespace,
 					},
@@ -262,7 +238,7 @@ func TestMain(t *testing.T) {
 				},
 			}
 			for _, testCase := range testCases {
-				packageWrapper := PackageWrapper{
+				packageWrapper := pkg.PackageWrapper{
 					UpstreamYaml: &upstreamyaml.UpstreamYaml{
 						ChartMetadata: chart.Metadata{
 							KubeVersion: testCase.UpstreamYamlKubeVersion,
