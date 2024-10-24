@@ -840,8 +840,12 @@ func validateRepo(c *cli.Context) error {
 	}
 
 	validationErrors := validate.Run(paths, configYaml)
+	if len(validationErrors) > 0 {
+		fmt.Println(errors.Join(validationErrors...))
+		return errors.New("validation failed")
+	}
 
-	return errors.Join(validationErrors...)
+	return nil
 }
 
 // cullCharts removes chart versions that are older than the passed number of
@@ -1127,7 +1131,7 @@ func main() {
 
 	err := app.Run(os.Args)
 	if err != nil {
-		logrus.Fatal(err)
+		fmt.Printf("error: %s", err)
+		os.Exit(1)
 	}
-
 }
