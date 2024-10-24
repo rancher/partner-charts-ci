@@ -10,6 +10,7 @@ func Run(configYaml ConfigurationYaml) []error {
 	validationFuncs := []ValidationFunc{
 		preventReleasedChartModifications,
 		preventDuplicatePackageNames,
+		validateIcons,
 	}
 	for _, validationFunc := range validationFuncs {
 		errors := validationFunc(configYaml)
