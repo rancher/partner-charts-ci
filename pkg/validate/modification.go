@@ -129,7 +129,10 @@ func compareDirectories(upstreamPath, updatePath string) (DirectoryComparison, e
 		if err != nil {
 			return err
 		}
-		relativePath := strings.TrimPrefix(upstreamFilePath, upstreamPath)
+		relativePath, err := filepath.Rel(upstreamPath, upstreamFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path of %s: %w", upstreamFilePath, err)
+		}
 		checkedSet[relativePath] = checked
 
 		if info.IsDir() {
@@ -173,7 +176,10 @@ func compareDirectories(upstreamPath, updatePath string) (DirectoryComparison, e
 		if err != nil {
 			return err
 		}
-		relativePath := strings.TrimPrefix(updateFilePath, updatePath)
+		relativePath, err := filepath.Rel(updatePath, updateFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path of %s: %w", updateFilePath, err)
+		}
 
 		if _, ok := checkedSet[relativePath]; !ok && !info.IsDir() {
 			directoryComparison.Added = append(directoryComparison.Added, updateFilePath)
