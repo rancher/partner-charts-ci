@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -53,10 +52,10 @@ func preventReleasedChartModifications(paths p.Paths, configYaml ConfigurationYa
 
 	directoryComparison := DirectoryComparison{}
 	for _, dirPath := range []string{"assets"} {
-		upstreamPath := path.Join(cloneDir, dirPath)
+		upstreamPath := filepath.Join(cloneDir, dirPath)
 		// TODO: leaving this (almost) as-is because this was changed in #35.
 		// Use paths.Assets instead of paths.RepoRoot once that PR is merged.
-		updatePath := path.Join(paths.RepoRoot, dirPath)
+		updatePath := filepath.Join(paths.RepoRoot, dirPath)
 		if _, err := os.Stat(updatePath); os.IsNotExist(err) {
 			logrus.Infof("Directory '%s' not in source. Skipping...", dirPath)
 			continue
@@ -137,7 +136,7 @@ func compareDirectories(upstreamPath, updatePath string) (DirectoryComparison, e
 			return nil
 		}
 
-		updateFilePath := path.Join(updatePath, relativePath)
+		updateFilePath := filepath.Join(updatePath, relativePath)
 		if _, err := os.Stat(updateFilePath); os.IsNotExist(err) {
 			directoryComparison.Removed = append(directoryComparison.Removed, updateFilePath)
 			return nil
