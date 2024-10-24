@@ -63,7 +63,7 @@ func TestCompareDirectories(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to get absolute path to update testing directory: %s", err)
 		}
-		directoryComparison, err := compareDirectories(upstreamPath, updatePath)
+		directoryComparison, err := compareDirectories(upstreamPath, updatePath, []string{})
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		}
@@ -81,7 +81,7 @@ func TestCompareDirectories(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to get absolute path to update testing directory: %s", err)
 		}
-		directoryComparison, err := compareDirectories(upstreamPath, updatePath)
+		directoryComparison, err := compareDirectories(upstreamPath, updatePath, []string{})
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		}
@@ -99,7 +99,7 @@ func TestCompareDirectories(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to get absolute path to update testing directory: %s", err)
 		}
-		directoryComparison, err := compareDirectories(upstreamPath, updatePath)
+		directoryComparison, err := compareDirectories(upstreamPath, updatePath, []string{})
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		}
@@ -117,12 +117,30 @@ func TestCompareDirectories(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to get absolute path to update testing directory: %s", err)
 		}
-		directoryComparison, err := compareDirectories(upstreamPath, updatePath)
+		directoryComparison, err := compareDirectories(upstreamPath, updatePath, []string{})
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		}
 		assert.Len(t, directoryComparison.Modified, 0)
 		assert.Len(t, directoryComparison.Added, 0)
 		assert.Equal(t, []string{filepath.Join(updatePath, "testfile")}, directoryComparison.Removed)
+	})
+
+	t.Run("should not report modification of a file in a skipped directory", func(t *testing.T) {
+		upstreamPath, err := filepath.Abs(filepath.Join("testdata", "modification-skipped-directory", "upstream"))
+		if err != nil {
+			t.Fatalf("failed to get absolute path to upstream testing directory: %s", err)
+		}
+		updatePath, err := filepath.Abs(filepath.Join("testdata", "modification-skipped-directory", "update"))
+		if err != nil {
+			t.Fatalf("failed to get absolute path to update testing directory: %s", err)
+		}
+		directoryComparison, err := compareDirectories(upstreamPath, updatePath, []string{"skipped-directory"})
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		assert.Len(t, directoryComparison.Modified, 0)
+		assert.Len(t, directoryComparison.Added, 0)
+		assert.Len(t, directoryComparison.Removed, 0)
 	})
 }

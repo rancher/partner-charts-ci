@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
@@ -64,7 +65,7 @@ func preventReleasedChartModifications(paths p.Paths, configYaml ConfigurationYa
 			logrus.Infof("Directory '%s' not in upstream. Skipping...", dirPath)
 			continue
 		}
-		newComparison, err := compareDirectories(upstreamPath, updatePath)
+		newComparison, err := compareDirectories(upstreamPath, updatePath, []string{"icons"})
 		if err != nil {
 			logrus.Error(err)
 		}
@@ -112,7 +113,7 @@ func checksumFile(filePath string) (string, error) {
 	return hash, nil
 }
 
-func compareDirectories(upstreamPath, updatePath string) (DirectoryComparison, error) {
+func compareDirectories(upstreamPath, updatePath string, skipDirs []string) (DirectoryComparison, error) {
 	logrus.Debugf("Comparing directories %s and %s", upstreamPath, updatePath)
 	directoryComparison := DirectoryComparison{}
 	checkedSet := make(map[string]struct{})
@@ -136,6 +137,9 @@ func compareDirectories(upstreamPath, updatePath string) (DirectoryComparison, e
 		checkedSet[relativePath] = checked
 
 		if info.IsDir() {
+			if slices.Contains(skipDirs, relativePath) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -181,7 +185,14 @@ func compareDirectories(upstreamPath, updatePath string) (DirectoryComparison, e
 			return fmt.Errorf("failed to get relative path of %s: %w", updateFilePath, err)
 		}
 
-		if _, ok := checkedSet[relativePath]; !ok && !info.IsDir() {
+		if info.IsDir() {
+			if slices.Contains(skipDirs, relativePath) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if _, ok := checkedSet[relativePath]; !ok {
 			directoryComparison.Added = append(directoryComparison.Added, updateFilePath)
 		}
 
@@ -250,7 +261,7 @@ func matchHelmCharts(upstreamPath, updatePath string) (bool, error) {
 	}
 	defer os.RemoveAll(updateChartDirectory)
 
-	directoryComparison, err := compareDirectories(upstreamChartDirectory, updateChartDirectory)
+	directoryComparison, err := compareDirectories(upstreamChartDirectory, updateChartDirectory, []string{})
 	if err != nil {
 		return false, fmt.Errorf("failed to compare directories: %w", err)
 	}
