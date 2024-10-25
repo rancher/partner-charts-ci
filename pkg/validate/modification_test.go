@@ -143,4 +143,42 @@ func TestCompareDirectories(t *testing.T) {
 		assert.Len(t, directoryComparison.Added, 0)
 		assert.Len(t, directoryComparison.Removed, 0)
 	})
+
+	t.Run("should report everything as added if upstream directory does not exist", func(t *testing.T) {
+		upstreamPath, err := filepath.Abs(filepath.Join("testdata", "addition-everything", "upstream"))
+		if err != nil {
+			t.Fatalf("failed to get absolute path to upstream testing directory: %s", err)
+		}
+		updatePath, err := filepath.Abs(filepath.Join("testdata", "addition-everything", "update"))
+		if err != nil {
+			t.Fatalf("failed to get absolute path to update testing directory: %s", err)
+		}
+		directoryComparison, err := compareDirectories(upstreamPath, updatePath, []string{})
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		assert.Len(t, directoryComparison.Modified, 0)
+		assert.Len(t, directoryComparison.Added, 1)
+		assert.Len(t, directoryComparison.Removed, 0)
+		assert.Equal(t, directoryComparison.Added[0], filepath.Join(updatePath, "testfile"))
+	})
+
+	t.Run("should report everything as removed if update directory does not exist", func(t *testing.T) {
+		upstreamPath, err := filepath.Abs(filepath.Join("testdata", "removal-everything", "upstream"))
+		if err != nil {
+			t.Fatalf("failed to get absolute path to upstream testing directory: %s", err)
+		}
+		updatePath, err := filepath.Abs(filepath.Join("testdata", "removal-everything", "update"))
+		if err != nil {
+			t.Fatalf("failed to get absolute path to update testing directory: %s", err)
+		}
+		directoryComparison, err := compareDirectories(upstreamPath, updatePath, []string{"skipped-directory"})
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		assert.Len(t, directoryComparison.Modified, 0)
+		assert.Len(t, directoryComparison.Added, 0)
+		assert.Len(t, directoryComparison.Removed, 1)
+		assert.Equal(t, directoryComparison.Removed[0], filepath.Join(updatePath, "testfile"))
+	})
 }

@@ -2,6 +2,7 @@ package validate
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -56,17 +57,9 @@ func preventReleasedChartModifications(paths p.Paths, configYaml ConfigurationYa
 	if err != nil {
 		return []error{fmt.Errorf("failed to get absolute path to assets dir: %w", err)}
 	}
-	if _, err := os.Stat(updatePath); os.IsNotExist(err) {
-		logrus.Infof("Directory '%s' not in source. Skipping...", updatePath)
-		return nil
-	}
-	if _, err := os.Stat(upstreamPath); os.IsNotExist(err) {
-		logrus.Infof("Directory '%s' not in upstream. Skipping...", upstreamPath)
-		return nil
-	}
 	directoryComparison, err := compareDirectories(upstreamPath, updatePath, []string{"icons"})
 	if err != nil {
-		return []error{fmt.Errorf("failed to compare %s and %s: %w", upstreamPath, updatePath, err)}
+		return []error{fmt.Errorf("failed to compare directories: %w", err)}
 	}
 
 	errors := make([]error, 0, len(directoryComparison.Modified))
@@ -115,13 +108,6 @@ func compareDirectories(upstreamPath, updatePath string, skipDirs []string) (Dir
 	directoryComparison := DirectoryComparison{}
 	checkedSet := make(map[string]struct{})
 	var checked = struct{}{}
-
-	if _, err := os.Stat(upstreamPath); os.IsNotExist(err) {
-		return directoryComparison, err
-	}
-	if _, err := os.Stat(updatePath); os.IsNotExist(err) {
-		return directoryComparison, err
-	}
 
 	findRemovalAndModification := func(upstreamFilePath string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -196,10 +182,10 @@ func compareDirectories(upstreamPath, updatePath string, skipDirs []string) (Dir
 		return nil
 	}
 
-	if err := filepath.Walk(upstreamPath, findRemovalAndModification); err != nil {
+	if err := filepath.Walk(upstreamPath, findRemovalAndModification); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return DirectoryComparison{}, fmt.Errorf("failed to search %q for removed or modified files: %w", upstreamPath, err)
 	}
-	if err := filepath.Walk(updatePath, findAddition); err != nil {
+	if err := filepath.Walk(updatePath, findAddition); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return DirectoryComparison{}, fmt.Errorf("failed to search %q for added files: %w", updatePath, err)
 	}
 
