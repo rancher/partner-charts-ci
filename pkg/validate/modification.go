@@ -51,25 +51,22 @@ func preventReleasedChartModifications(paths p.Paths, configYaml ConfigurationYa
 		logrus.Fatal(err)
 	}
 
-	directoryComparison := DirectoryComparison{}
-	for _, dirPath := range []string{"assets"} {
-		upstreamPath := filepath.Join(cloneDir, dirPath)
-		// TODO: leaving this (almost) as-is because this was changed in #35.
-		// Use paths.Assets instead of paths.RepoRoot once that PR is merged.
-		updatePath := filepath.Join(paths.RepoRoot, dirPath)
-		if _, err := os.Stat(updatePath); os.IsNotExist(err) {
-			logrus.Infof("Directory '%s' not in source. Skipping...", dirPath)
-			continue
-		}
-		if _, err := os.Stat(upstreamPath); os.IsNotExist(err) {
-			logrus.Infof("Directory '%s' not in upstream. Skipping...", dirPath)
-			continue
-		}
-		newComparison, err := compareDirectories(upstreamPath, updatePath, []string{"icons"})
-		if err != nil {
-			logrus.Error(err)
-		}
-		directoryComparison.Merge(newComparison)
+	upstreamPath := filepath.Join(cloneDir, "assets")
+	updatePath, err := filepath.Abs(paths.Assets)
+	if err != nil {
+		return []error{fmt.Errorf("failed to get absolute path to assets dir: %w", err)}
+	}
+	if _, err := os.Stat(updatePath); os.IsNotExist(err) {
+		logrus.Infof("Directory '%s' not in source. Skipping...", updatePath)
+		return nil
+	}
+	if _, err := os.Stat(upstreamPath); os.IsNotExist(err) {
+		logrus.Infof("Directory '%s' not in upstream. Skipping...", upstreamPath)
+		return nil
+	}
+	directoryComparison, err := compareDirectories(upstreamPath, updatePath, []string{"icons"})
+	if err != nil {
+		return []error{fmt.Errorf("failed to compare %s and %s: %w", upstreamPath, updatePath, err)}
 	}
 
 	errors := make([]error, 0, len(directoryComparison.Modified))
