@@ -39,7 +39,7 @@ func (directoryComparison *DirectoryComparison) Merge(newComparison DirectoryCom
 // versions have been modified outside of a few that must be allowed,
 // such as the deprecated field of Chart.yaml and Rancher-specific
 // annotations.
-func preventReleasedChartModifications(configYaml ConfigurationYaml) []error {
+func preventReleasedChartModifications(paths p.Paths, configYaml ConfigurationYaml) []error {
 	cloneDir, err := os.MkdirTemp("", "gitRepo")
 	if err != nil {
 		logrus.Fatal(err)
@@ -54,7 +54,9 @@ func preventReleasedChartModifications(configYaml ConfigurationYaml) []error {
 	directoryComparison := DirectoryComparison{}
 	for _, dirPath := range []string{"assets"} {
 		upstreamPath := path.Join(cloneDir, dirPath)
-		updatePath := path.Join(p.GetRepoRoot(), dirPath)
+		// TODO: leaving this (almost) as-is because this was changed in #35.
+		// Use paths.Assets instead of paths.RepoRoot once that PR is merged.
+		updatePath := path.Join(paths.RepoRoot, dirPath)
 		if _, err := os.Stat(updatePath); os.IsNotExist(err) {
 			logrus.Infof("Directory '%s' not in source. Skipping...", dirPath)
 			continue

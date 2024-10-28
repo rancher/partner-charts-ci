@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -50,7 +49,6 @@ const (
 	repositoryChartsDir = "charts"
 	//repositoryPackagesDir sets the directory name for package configurations
 	repositoryPackagesDir = "packages"
-	configOptionsFile     = "configuration.yaml"
 	featuredMax           = 5
 	upstreamYamlFile      = "upstream.yaml"
 )
@@ -924,13 +922,13 @@ func autoUpdate(c *cli.Context) {
 
 // CLI function call - Validates repo against released
 func validateRepo(c *cli.Context) error {
-	configYamlPath := path.Join(p.GetRepoRoot(), configOptionsFile)
-	configYaml, err := validate.ReadConfig(configYamlPath)
+	paths := p.Get()
+	configYaml, err := validate.ReadConfig(paths.ConfigurationYaml)
 	if err != nil {
-		logrus.Fatalf("failed to read %s: %s\n", configOptionsFile, err)
+		logrus.Fatalf("failed to read configuration.yaml: %s\n", err)
 	}
 
-	validationErrors := validate.Run(configYaml)
+	validationErrors := validate.Run(paths, configYaml)
 
 	return errors.Join(validationErrors...)
 }

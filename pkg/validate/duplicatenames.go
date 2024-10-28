@@ -11,9 +11,7 @@ import (
 // that are eventually served from the partner charts repository are not. The
 // charts' names come from the package names. So, we need to ensure that users
 // cannot create a package with a name that another package already has.
-func preventDuplicatePackageNames(_ ConfigurationYaml) []error {
-	// TODO: remove this once we can pass paths down from the top level
-	paths := p.Get()
+func preventDuplicatePackageNames(paths p.Paths, _ ConfigurationYaml) []error {
 	packageWrappers, err := pkg.ListPackageWrappers(paths, "")
 	if err != nil {
 		return []error{fmt.Errorf("failed to list package wrappers: %w", err)}
