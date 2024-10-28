@@ -95,7 +95,7 @@ func annotate(paths p.Paths, vendor, chartName, annotation, value string, remove
 		}
 	}
 
-	if err := writeCharts(paths.RepoRoot, vendor, chartName, existingCharts); err != nil {
+	if err := writeCharts(paths, vendor, chartName, existingCharts); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
@@ -211,7 +211,7 @@ func ApplyUpdates(paths p.Paths, packageWrapper pkg.PackageWrapper) error {
 	allCharts := make([]*ChartWrapper, 0, len(existingCharts)+len(newCharts))
 	allCharts = append(allCharts, existingCharts...)
 	allCharts = append(allCharts, newCharts...)
-	if err := writeCharts(paths.RepoRoot, packageWrapper.Vendor, packageWrapper.Name, allCharts); err != nil {
+	if err := writeCharts(paths, packageWrapper.Vendor, packageWrapper.Name, allCharts); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
@@ -229,16 +229,16 @@ func getTgzFilename(helmChart *chart.Chart) string {
 // packages passed in chartWrappers. In other words, charts that are
 // not in chartWrappers are deleted, and charts from chartWrappers
 // that are modified or do not exist on disk are written.
-func writeCharts(repoRoot, vendor, chartName string, chartWrappers []*ChartWrapper) error {
-	chartsDir := filepath.Join(repoRoot, repositoryChartsDir, vendor, chartName)
-	assetsDir := filepath.Join(repoRoot, repositoryAssetsDir, vendor)
+func writeCharts(paths p.Paths, vendor, chartName string, chartWrappers []*ChartWrapper) error {
+	chartsDir := filepath.Join(paths.Charts, vendor, chartName)
+	assetsDir := filepath.Join(paths.Assets, vendor)
 
 	if err := os.RemoveAll(chartsDir); err != nil {
 		return fmt.Errorf("failed to wipe existing charts directory: %w", err)
 	}
 
 	// delete any charts on disk that are not in chartWrappers
-	existingCharts, err := loadExistingCharts(repoRoot, vendor, chartName)
+	existingCharts, err := loadExistingCharts(paths.RepoRoot, vendor, chartName)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -936,7 +936,7 @@ func cullCharts(c *cli.Context) error {
 			continue
 		}
 
-		if err := writeCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, keptCharts); err != nil {
+		if err := writeCharts(paths, packageWrapper.Vendor, packageWrapper.Name, keptCharts); err != nil {
 			logrus.Errorf("failed to write charts for %q: %s", packageWrapper.FullName(), err)
 			skippedPackages = append(skippedPackages, packageWrapper.FullName())
 			continue
@@ -1064,7 +1064,7 @@ func deprecatePackage(c *cli.Context) error {
 			chartWrapper.Modified = true
 		}
 	}
-	if err := writeCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, chartWrappers); err != nil {
+	if err := writeCharts(paths, packageWrapper.Vendor, packageWrapper.Name, chartWrappers); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
