@@ -41,8 +41,6 @@ const (
 	annotationReleaseName  = "catalog.cattle.io/release-name"
 	//packageEnvVariable sets the environment variable to check for a package name
 	packageEnvVariable = "PACKAGE"
-	//repositoryAssetsDir sets the directory name for chart asset files
-	repositoryAssetsDir = "assets"
 	//repositoryChartsDir sets the directory name for stored charts
 	repositoryChartsDir = "charts"
 	//repositoryPackagesDir sets the directory name for package configurations
@@ -121,7 +119,7 @@ func commitChanges(paths p.Paths, updatedList pkg.PackageList) error {
 	}
 
 	for _, packageWrapper := range updatedList {
-		assetsPath := filepath.Join(repositoryAssetsDir, packageWrapper.Vendor)
+		assetsPath := filepath.Join(paths.Assets, packageWrapper.Vendor)
 		chartsPath := filepath.Join(repositoryChartsDir, packageWrapper.Vendor, packageWrapper.Name)
 		packagesPath := filepath.Join(repositoryPackagesDir, packageWrapper.Vendor, packageWrapper.Name)
 
@@ -539,8 +537,7 @@ func getByAnnotation(paths p.Paths, annotation, value string) map[string]repo.Ch
 // index.yaml file should treat the charts' Chart.yaml files as the
 // authoritative source of chart metadata.
 func writeIndex(paths p.Paths) error {
-	assetsDirectoryPath := filepath.Join(p.GetRepoRoot(), repositoryAssetsDir)
-	newHelmIndexYaml, err := repo.IndexDirectory(assetsDirectoryPath, repositoryAssetsDir)
+	newHelmIndexYaml, err := repo.IndexDirectory(paths.Assets, filepath.Base(paths.Assets))
 	if err != nil {
 		return fmt.Errorf("failed to index assets directory: %w", err)
 	}
