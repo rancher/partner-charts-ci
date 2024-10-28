@@ -103,10 +103,10 @@ func annotate(paths p.Paths, vendor, chartName, annotation, value string, remove
 }
 
 // Commits changes to index file, assets, charts, and packages
-func commitChanges(updatedList pkg.PackageList) error {
+func commitChanges(paths p.Paths, updatedList pkg.PackageList) error {
 	commitOptions := git.CommitOptions{}
 
-	r, err := git.PlainOpen(p.GetRepoRoot())
+	r, err := git.PlainOpen(paths.RepoRoot)
 	if err != nil {
 		return err
 	}
@@ -697,8 +697,7 @@ func generateChanges(auto bool) {
 	}
 
 	if auto {
-		err = commitChanges(packageList)
-		if err != nil {
+		if err := commitChanges(paths, packageList); err != nil {
 			logrus.Fatal(err)
 		}
 	}
