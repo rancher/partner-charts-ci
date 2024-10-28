@@ -140,9 +140,9 @@ func (pw PackageWrapper) GetOverlayFiles() (map[string][]byte, error) {
 func ListPackageWrappers(paths p.Paths, currentPackage string) (PackageList, error) {
 	var globPattern string
 	if currentPackage == "" {
-		globPattern = "packages/*/*"
+		globPattern = paths.Packages + "/*/*"
 	} else {
-		globPattern = filepath.Join("packages", currentPackage)
+		globPattern = filepath.Join(paths.Packages, currentPackage)
 	}
 	matches, err := filepath.Glob(globPattern)
 	if err != nil {

@@ -118,9 +118,8 @@ func commitChanges(paths p.Paths, updatedList pkg.PackageList) error {
 
 	logrus.Info("Committing changes")
 
-	iconsPath := filepath.Join(repositoryAssetsDir, "icons")
-	if _, err := wt.Add(iconsPath); err != nil {
-		return fmt.Errorf("failed to add %q to working tree: %w", iconsPath, err)
+	if _, err := wt.Add(paths.Icons); err != nil {
+		return fmt.Errorf("failed to add %q to working tree: %w", paths.Icons, err)
 	}
 
 	for _, packageWrapper := range updatedList {
@@ -204,7 +203,7 @@ func ApplyUpdates(paths p.Paths, packageWrapper pkg.PackageWrapper) error {
 		newCharts = append(newCharts, NewChartWrapper(newChart))
 	}
 
-	if err := integrateCharts(packageWrapper, existingCharts, newCharts); err != nil {
+	if err := integrateCharts(paths, packageWrapper, existingCharts, newCharts); err != nil {
 		return fmt.Errorf("failed to reconcile charts for package %q: %w", packageWrapper.Name, err)
 	}
 
@@ -337,7 +336,7 @@ func getExistingChartTgzFiles(paths p.Paths, vendor string, packageName string) 
 // ensures that the state of all charts, both current and new, is
 // correct. Should never modify an existing chart, except for in
 // the special case of the "featured" annotation.
-func integrateCharts(packageWrapper pkg.PackageWrapper, existingCharts, newCharts []*ChartWrapper) error {
+func integrateCharts(paths p.Paths, packageWrapper pkg.PackageWrapper, existingCharts, newCharts []*ChartWrapper) error {
 	overlayFiles, err := packageWrapper.GetOverlayFiles()
 	if err != nil {
 		return fmt.Errorf("failed to get overlay files: %w", err)
@@ -351,7 +350,7 @@ func integrateCharts(packageWrapper pkg.PackageWrapper, existingCharts, newChart
 		if err := addAnnotations(packageWrapper, newChart.Chart); err != nil {
 			return fmt.Errorf("failed to add annotations to chart %q version %q: %w", newChart.Name(), newChart.Metadata.Version, err)
 		}
-		if err := ensureIcon(packageWrapper, newChart); err != nil {
+		if err := ensureIcon(paths, packageWrapper, newChart); err != nil {
 			return fmt.Errorf("failed to ensure icon for chart %q version %q: %w", newChart.Name(), newChart.Metadata.Version, err)
 		}
 		newChart.Modified = true
@@ -388,8 +387,8 @@ func applyOverlayFiles(overlayFiles map[string][]byte, helmChart *chart.Chart) e
 // directory, and that the icon URL field for helmChart refers to this local
 // icon file. We do this so that airgap installations of Rancher have access
 // to icons without needing to download them from a remote source.
-func ensureIcon(packageWrapper pkg.PackageWrapper, chartWrapper *ChartWrapper) error {
-	localIconPath, err := icons.EnsureIconDownloaded(chartWrapper.Metadata.Icon, packageWrapper.Name)
+func ensureIcon(paths p.Paths, packageWrapper pkg.PackageWrapper, chartWrapper *ChartWrapper) error {
+	localIconPath, err := icons.EnsureIconDownloaded(paths, chartWrapper.Metadata.Icon, packageWrapper.Name)
 	if err != nil {
 		return fmt.Errorf("failed to ensure icon downloaded: %w", err)
 	}
@@ -621,7 +620,7 @@ func ensureIcons(c *cli.Context) error {
 		if len(existingCharts) == 0 {
 			logrus.Errorf("found no existing charts for package %q", packageWrapper.FullName())
 		}
-		if _, err := icons.EnsureIconDownloaded(existingCharts[0].Metadata.Icon, packageWrapper.Name); err != nil {
+		if _, err := icons.EnsureIconDownloaded(paths, existingCharts[0].Metadata.Icon, packageWrapper.Name); err != nil {
 			logrus.Errorf("failed to ensure icon downloaded for package %q: %s", packageWrapper.FullName(), err)
 		}
 	}
