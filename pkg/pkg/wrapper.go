@@ -45,27 +45,6 @@ type PackageWrapper struct {
 	Vendor string
 }
 
-type PackageList []PackageWrapper
-
-func (p PackageList) Len() int {
-	return len(p)
-}
-
-func (p PackageList) Swap(i, j int) {
-	p[i], p[j] = p[j], p[i]
-}
-
-func (p PackageList) Less(i, j int) bool {
-	if p[i].SourceMetadata != nil && p[j].SourceMetadata != nil {
-		if p[i].Vendor != p[j].Vendor {
-			return p[i].Vendor < p[j].Vendor
-		}
-		return p[i].Name < p[j].Name
-	}
-
-	return false
-}
-
 func (packageWrapper *PackageWrapper) FullName() string {
 	return packageWrapper.Vendor + "/" + packageWrapper.Name
 }
@@ -137,7 +116,7 @@ func (pw PackageWrapper) GetOverlayFiles() (map[string][]byte, error) {
 // it must be in <vendor>/<name> format (i.e. the "full" package name).
 // If currentPackage is specified, the function returns a slice with only
 // one element, which is the specified package.
-func ListPackageWrappers(paths p.Paths, currentPackage string) (PackageList, error) {
+func ListPackageWrappers(paths p.Paths, currentPackage string) ([]PackageWrapper, error) {
 	var globPattern string
 	if currentPackage == "" {
 		globPattern = paths.Packages + "/*/*"
@@ -156,7 +135,7 @@ func ListPackageWrappers(paths p.Paths, currentPackage string) (PackageList, err
 		}
 	}
 
-	packageList := make(PackageList, 0, len(matches))
+	packageList := make([]PackageWrapper, 0, len(matches))
 	for _, match := range matches {
 		parts := strings.Split(match, "/")
 		if len(parts) != 3 {

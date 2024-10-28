@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -96,8 +95,16 @@ func annotate(paths p.Paths, vendor, chartName, annotation, value string, remove
 	return nil
 }
 
+// sortPackageWrappers sorts a slice of PackageWrappers first by vendor
+// and then by package name.
+func sortPackageWrappers(packageWrappers []pkg.PackageWrapper) {
+	slices.SortFunc(packageWrappers, func(a, b pkg.PackageWrapper) int {
+		return strings.Compare(a.FullName(), b.FullName())
+	})
+}
+
 // Commits changes to index file, assets, charts, and packages
-func commitChanges(paths p.Paths, updatedList pkg.PackageList) error {
+func commitChanges(paths p.Paths, updatedPackageWrappers []pkg.PackageWrapper) error {
 	commitOptions := git.CommitOptions{}
 
 	r, err := git.PlainOpen(paths.RepoRoot)
@@ -116,7 +123,7 @@ func commitChanges(paths p.Paths, updatedList pkg.PackageList) error {
 		return fmt.Errorf("failed to add %q to working tree: %w", paths.Icons, err)
 	}
 
-	for _, packageWrapper := range updatedList {
+	for _, packageWrapper := range updatedPackageWrappers {
 		assetsPath := filepath.Join(paths.Assets, packageWrapper.Vendor)
 		chartsPath := filepath.Join(paths.Charts, packageWrapper.Vendor, packageWrapper.Name)
 		packagesPath := filepath.Join(repositoryPackagesDir, packageWrapper.Vendor, packageWrapper.Name)
@@ -147,8 +154,8 @@ func commitChanges(paths p.Paths, updatedList pkg.PackageList) error {
 		return fmt.Errorf("failed to add %q to working tree: %w", paths.IndexYaml, err)
 	}
 	commitMessage := "Added chart versions:\n"
-	sort.Sort(updatedList)
-	for _, packageWrapper := range updatedList {
+	sortPackageWrappers(updatedPackageWrappers)
+	for _, packageWrapper := range updatedPackageWrappers {
 		commitMessage += fmt.Sprintf("  %s:\n", packageWrapper.FullName())
 		for _, version := range packageWrapper.FetchVersions {
 			commitMessage += fmt.Sprintf("    - %s\n", version.Version)
@@ -637,7 +644,7 @@ func generateChanges(auto bool) {
 		logrus.Fatalf("failed to list packages: %s", err)
 	}
 
-	packageList := make(pkg.PackageList, 0, len(packageWrappers))
+	packageList := make([]pkg.PackageWrapper, 0, len(packageWrappers))
 	for _, packageWrapper := range packageWrappers {
 		if packageWrapper.UpstreamYaml.Deprecated {
 			logrus.Warnf("Package %s is deprecated; skipping update", packageWrapper.FullName())
@@ -693,29 +700,17 @@ func generateChanges(auto bool) {
 	}
 }
 
-// CLI function call - Prints list of available packages to STDout
+// listPackages prints out the packages in the current repository.
 func listPackages(c *cli.Context) error {
 	currentPackage := os.Getenv(packageEnvVariable)
 	paths := p.Get()
-
-	packageList, err := pkg.ListPackageWrappers(paths, currentPackage)
+	packageWrappers, err := pkg.ListPackageWrappers(paths, currentPackage)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
 	}
-	vendorSorted := make([]string, 0)
-	for _, packageWrapper := range packageList {
-		packagesPath := filepath.Join(p.GetRepoRoot(), repositoryPackagesDir)
-		packageParentPath := filepath.Dir(packageWrapper.Path)
-		packageRelativePath := filepath.Base(packageWrapper.Path)
-		if packagesPath != packageParentPath {
-			packageRelativePath = filepath.Join(filepath.Base(packageParentPath), packageRelativePath)
-		}
-		vendorSorted = append(vendorSorted, packageRelativePath)
-	}
-
-	sort.Strings(vendorSorted)
-	for _, pkg := range vendorSorted {
-		fmt.Println(pkg)
+	sortPackageWrappers(packageWrappers)
+	for _, packageWrapper := range packageWrappers {
+		fmt.Println(packageWrapper.FullName())
 	}
 
 	return nil

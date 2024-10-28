@@ -19,7 +19,7 @@ func preventDuplicatePackageNames(paths p.Paths, _ ConfigurationYaml) []error {
 	return findDuplicateNames(packageWrappers)
 }
 
-func findDuplicateNames(packageWrappers pkg.PackageList) []error {
+func findDuplicateNames(packageWrappers []pkg.PackageWrapper) []error {
 	errors := make([]error, 0, len(packageWrappers))
 	packageNames := make(map[string]string)
 	for _, packageWrapper := range packageWrappers {
