@@ -40,10 +40,8 @@ const (
 	annotationReleaseName  = "catalog.cattle.io/release-name"
 	//packageEnvVariable sets the environment variable to check for a package name
 	packageEnvVariable = "PACKAGE"
-	//repositoryPackagesDir sets the directory name for package configurations
-	repositoryPackagesDir = "packages"
-	featuredMax           = 5
-	upstreamYamlFile      = "upstream.yaml"
+	featuredMax        = 5
+	upstreamYamlFile   = "upstream.yaml"
 )
 
 var (
@@ -126,7 +124,7 @@ func commitChanges(paths p.Paths, updatedPackageWrappers []pkg.PackageWrapper) e
 	for _, packageWrapper := range updatedPackageWrappers {
 		assetsPath := filepath.Join(paths.Assets, packageWrapper.Vendor)
 		chartsPath := filepath.Join(paths.Charts, packageWrapper.Vendor, packageWrapper.Name)
-		packagesPath := filepath.Join(repositoryPackagesDir, packageWrapper.Vendor, packageWrapper.Name)
+		packagesPath := filepath.Join(paths.Packages, packageWrapper.Vendor, packageWrapper.Name)
 
 		for _, path := range []string{assetsPath, chartsPath, packagesPath} {
 			if _, err := wt.Add(path); err != nil {
@@ -989,7 +987,7 @@ func removePackage(c *cli.Context) error {
 	}
 
 	removalPaths := []string{
-		filepath.Join(p.GetRepoRoot(), repositoryPackagesDir, packageWrapper.Vendor, packageWrapper.Name),
+		filepath.Join(paths.Packages, packageWrapper.Vendor, packageWrapper.Name),
 		filepath.Join(paths.Charts, packageWrapper.Vendor, packageWrapper.Name),
 	}
 
