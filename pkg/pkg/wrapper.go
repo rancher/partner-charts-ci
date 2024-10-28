@@ -11,7 +11,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/rancher/partner-charts-ci/pkg/conform"
 	"github.com/rancher/partner-charts-ci/pkg/fetcher"
-	"github.com/rancher/partner-charts-ci/pkg/paths"
+	p "github.com/rancher/partner-charts-ci/pkg/paths"
 	"github.com/rancher/partner-charts-ci/pkg/upstreamyaml"
 	"github.com/sirupsen/logrus"
 
@@ -285,7 +285,7 @@ func collectNonStoredVersions(versions repo.ChartVersions, storedVersions repo.C
 
 func getStoredVersions(chartName string) (repo.ChartVersions, error) {
 	storedVersions := repo.ChartVersions{}
-	indexFilePath := filepath.Join(paths.GetRepoRoot(), "index.yaml")
+	indexFilePath := filepath.Join(p.GetRepoRoot(), "index.yaml")
 	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
 	if err != nil {
 		return storedVersions, fmt.Errorf("failed to load index file: %w", err)

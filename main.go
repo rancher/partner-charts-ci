@@ -17,7 +17,7 @@ import (
 	"github.com/rancher/partner-charts-ci/pkg/conform"
 	"github.com/rancher/partner-charts-ci/pkg/fetcher"
 	"github.com/rancher/partner-charts-ci/pkg/icons"
-	"github.com/rancher/partner-charts-ci/pkg/paths"
+	p "github.com/rancher/partner-charts-ci/pkg/paths"
 	"github.com/rancher/partner-charts-ci/pkg/pkg"
 	"github.com/rancher/partner-charts-ci/pkg/upstreamyaml"
 	"github.com/rancher/partner-charts-ci/pkg/validate"
@@ -77,7 +77,7 @@ func NewChartWrapper(helmChart *chart.Chart) *ChartWrapper {
 }
 
 func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bool) error {
-	existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), vendor, chartName)
+	existingCharts, err := loadExistingCharts(p.GetRepoRoot(), vendor, chartName)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -97,7 +97,7 @@ func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bo
 		}
 	}
 
-	if err := writeCharts(paths.GetRepoRoot(), vendor, chartName, existingCharts); err != nil {
+	if err := writeCharts(p.GetRepoRoot(), vendor, chartName, existingCharts); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
@@ -105,7 +105,7 @@ func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bo
 }
 
 func gitCleanup() error {
-	r, err := git.PlainOpen(paths.GetRepoRoot())
+	r, err := git.PlainOpen(p.GetRepoRoot())
 	if err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func gitCleanup() error {
 func commitChanges(updatedList pkg.PackageList) error {
 	commitOptions := git.CommitOptions{}
 
-	r, err := git.PlainOpen(paths.GetRepoRoot())
+	r, err := git.PlainOpen(p.GetRepoRoot())
 	if err != nil {
 		return err
 	}
@@ -220,7 +220,7 @@ func commitChanges(updatedList pkg.PackageList) error {
 func ApplyUpdates(packageWrapper pkg.PackageWrapper) error {
 	logrus.Debugf("Applying updates for package %s/%s\n", packageWrapper.Vendor, packageWrapper.Name)
 
-	existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+	existingCharts, err := loadExistingCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -249,7 +249,7 @@ func ApplyUpdates(packageWrapper pkg.PackageWrapper) error {
 	allCharts := make([]*ChartWrapper, 0, len(existingCharts)+len(newCharts))
 	allCharts = append(allCharts, existingCharts...)
 	allCharts = append(allCharts, newCharts...)
-	if err := writeCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, allCharts); err != nil {
+	if err := writeCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, allCharts); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
@@ -541,7 +541,7 @@ func ensureFeaturedAnnotation(existingCharts, newCharts []*ChartWrapper) error {
 // all repo.ChartVersions that have the specified annotation will be
 // returned, regardless of that annotation's value.
 func getByAnnotation(annotation, value string) map[string]repo.ChartVersions {
-	indexFilePath := filepath.Join(paths.GetRepoRoot(), indexFile)
+	indexFilePath := filepath.Join(p.GetRepoRoot(), indexFile)
 	indexYaml, err := repo.LoadIndexFile(indexFilePath)
 	if err != nil {
 		logrus.Fatalf("failed to read index.yaml: %s", err)
@@ -581,8 +581,8 @@ func getByAnnotation(annotation, value string) map[string]repo.ChartVersions {
 // index.yaml file should treat the charts' Chart.yaml files as the
 // authoritative source of chart metadata.
 func writeIndex() error {
-	indexFilePath := filepath.Join(paths.GetRepoRoot(), indexFile)
-	assetsDirectoryPath := filepath.Join(paths.GetRepoRoot(), repositoryAssetsDir)
+	indexFilePath := filepath.Join(p.GetRepoRoot(), indexFile)
+	assetsDirectoryPath := filepath.Join(p.GetRepoRoot(), repositoryAssetsDir)
 	newHelmIndexYaml, err := repo.IndexDirectory(assetsDirectoryPath, repositoryAssetsDir)
 	if err != nil {
 		return fmt.Errorf("failed to index assets directory: %w", err)
@@ -653,7 +653,7 @@ func ensureIcons(c *cli.Context) error {
 		if _, err := icons.GetDownloadedIconPath(packageWrapper.Name); err == nil {
 			continue
 		}
-		existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+		existingCharts, err := loadExistingCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
 		if err != nil {
 			logrus.Errorf("failed to load existing charts for package %s: %s", packageWrapper.FullName(), err)
 		}
@@ -748,7 +748,7 @@ func listPackages(c *cli.Context) error {
 	}
 	vendorSorted := make([]string, 0)
 	for _, packageWrapper := range packageList {
-		packagesPath := filepath.Join(paths.GetRepoRoot(), repositoryPackagesDir)
+		packagesPath := filepath.Join(p.GetRepoRoot(), repositoryPackagesDir)
 		packageParentPath := filepath.Dir(packageWrapper.Path)
 		packageRelativePath := filepath.Base(packageWrapper.Path)
 		if packagesPath != packageParentPath {
@@ -915,7 +915,7 @@ func autoUpdate(c *cli.Context) {
 
 // CLI function call - Validates repo against released
 func validateRepo(c *cli.Context) error {
-	configYamlPath := path.Join(paths.GetRepoRoot(), configOptionsFile)
+	configYamlPath := path.Join(p.GetRepoRoot(), configOptionsFile)
 	configYaml, err := validate.ReadConfig(configYamlPath)
 	if err != nil {
 		logrus.Fatalf("failed to read %s: %s\n", configOptionsFile, err)
@@ -952,7 +952,7 @@ func cullCharts(c *cli.Context) error {
 	skippedPackages := make([]string, 0, len(packageWrappers))
 	for _, packageWrapper := range packageWrappers {
 		logrus.Infof("culling %s", packageWrapper.FullName())
-		existingCharts, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+		existingCharts, err := loadExistingCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
 		if err != nil {
 			logrus.Errorf("failed to load existing charts for %q: %s", packageWrapper.FullName(), err)
 			skippedPackages = append(skippedPackages, packageWrapper.FullName())
@@ -972,7 +972,7 @@ func cullCharts(c *cli.Context) error {
 			continue
 		}
 
-		if err := writeCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, keptCharts); err != nil {
+		if err := writeCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, keptCharts); err != nil {
 			logrus.Errorf("failed to write charts for %q: %s", packageWrapper.FullName(), err)
 			skippedPackages = append(skippedPackages, packageWrapper.FullName())
 			continue
@@ -1038,11 +1038,11 @@ func removePackage(c *cli.Context) error {
 	}
 
 	removalPaths := []string{
-		filepath.Join(paths.GetRepoRoot(), repositoryPackagesDir, packageWrapper.Vendor, packageWrapper.Name),
-		filepath.Join(paths.GetRepoRoot(), repositoryChartsDir, packageWrapper.Vendor, packageWrapper.Name),
+		filepath.Join(p.GetRepoRoot(), repositoryPackagesDir, packageWrapper.Vendor, packageWrapper.Name),
+		filepath.Join(p.GetRepoRoot(), repositoryChartsDir, packageWrapper.Vendor, packageWrapper.Name),
 	}
 
-	assetFiles, err := getExistingChartTgzFiles(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+	assetFiles, err := getExistingChartTgzFiles(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
 	if err != nil {
 		return fmt.Errorf("failed to list asset files for %s: %w", packageWrapper.FullName(), err)
 	}
@@ -1088,7 +1088,7 @@ func deprecatePackage(c *cli.Context) error {
 	}
 
 	// set deprecated: true in each chart version's Chart.yaml
-	chartWrappers, err := loadExistingCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+	chartWrappers, err := loadExistingCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -1098,7 +1098,7 @@ func deprecatePackage(c *cli.Context) error {
 			chartWrapper.Modified = true
 		}
 	}
-	if err := writeCharts(paths.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, chartWrappers); err != nil {
+	if err := writeCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, chartWrappers); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
