@@ -136,7 +136,7 @@ func (pw PackageWrapper) GetOverlayFiles() (map[string][]byte, error) {
 // it must be in <vendor>/<name> format (i.e. the "full" package name).
 // If currentPackage is specified, the function returns a slice with only
 // one element, which is the specified package.
-func ListPackageWrappers(currentPackage string) (PackageList, error) {
+func ListPackageWrappers(paths p.Paths, currentPackage string) (PackageList, error) {
 	var globPattern string
 	if currentPackage == "" {
 		globPattern = "packages/*/*"

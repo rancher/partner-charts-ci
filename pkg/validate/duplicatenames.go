@@ -3,6 +3,7 @@ package validate
 import (
 	"fmt"
 
+	p "github.com/rancher/partner-charts-ci/pkg/paths"
 	"github.com/rancher/partner-charts-ci/pkg/pkg"
 )
 
@@ -11,7 +12,9 @@ import (
 // charts' names come from the package names. So, we need to ensure that users
 // cannot create a package with a name that another package already has.
 func preventDuplicatePackageNames(_ ConfigurationYaml) []error {
-	packageWrappers, err := pkg.ListPackageWrappers("")
+	// TODO: remove this once we can pass paths down from the top level
+	paths := p.Get()
+	packageWrappers, err := pkg.ListPackageWrappers(paths, "")
 	if err != nil {
 		return []error{fmt.Errorf("failed to list package wrappers: %w", err)}
 	}
