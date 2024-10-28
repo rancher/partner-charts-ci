@@ -76,8 +76,8 @@ func NewChartWrapper(helmChart *chart.Chart) *ChartWrapper {
 	}
 }
 
-func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bool) error {
-	existingCharts, err := loadExistingCharts(p.GetRepoRoot(), vendor, chartName)
+func annotate(paths p.Paths, vendor, chartName, annotation, value string, remove, onlyLatest bool) error {
+	existingCharts, err := loadExistingCharts(paths.RepoRoot, vendor, chartName)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -97,7 +97,7 @@ func annotate(vendor, chartName, annotation, value string, remove, onlyLatest bo
 		}
 	}
 
-	if err := writeCharts(p.GetRepoRoot(), vendor, chartName, existingCharts); err != nil {
+	if err := writeCharts(paths.RepoRoot, vendor, chartName, existingCharts); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
@@ -794,7 +794,8 @@ func addFeaturedChart(c *cli.Context) error {
 	} else {
 		vendor := packageWrapper.Vendor
 		chartName := packageWrapper.Name
-		if err := annotate(vendor, chartName, annotationFeatured, inputIndex, false, true); err != nil {
+		paths := p.Get()
+		if err := annotate(paths, vendor, chartName, annotationFeatured, inputIndex, false, true); err != nil {
 			return fmt.Errorf("failed to annotate %q: %w", packageWrapper.FullName(), err)
 		}
 		if err := writeIndex(); err != nil {
@@ -820,7 +821,8 @@ func removeFeaturedChart(c *cli.Context) error {
 
 	vendor := packageWrapper.Vendor
 	chartName := packageWrapper.Name
-	if err := annotate(vendor, chartName, annotationFeatured, "", true, false); err != nil {
+	paths := p.Get()
+	if err := annotate(paths, vendor, chartName, annotationFeatured, "", true, false); err != nil {
 		return fmt.Errorf("failed to deannotate %q: %w", packageWrapper.FullName(), err)
 	}
 
@@ -884,7 +886,8 @@ func hideChart(c *cli.Context) error {
 
 	vendor := packageWrapper.Vendor
 	chartName := packageWrapper.Name
-	if err := annotate(vendor, chartName, annotationHidden, "true", false, false); err != nil {
+	paths := p.Get()
+	if err := annotate(paths, vendor, chartName, annotationHidden, "true", false, false); err != nil {
 		return fmt.Errorf("failed to annotate package: %w", err)
 	}
 	if err := writeIndex(); err != nil {
