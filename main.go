@@ -39,8 +39,6 @@ const (
 	annotationKubeVersion  = "catalog.cattle.io/kube-version"
 	annotationNamespace    = "catalog.cattle.io/namespace"
 	annotationReleaseName  = "catalog.cattle.io/release-name"
-	//indexFile sets the filename for the repo index yaml
-	indexFile = "index.yaml"
 	//packageEnvVariable sets the environment variable to check for a package name
 	packageEnvVariable = "PACKAGE"
 	//repositoryAssetsDir sets the directory name for chart asset files
@@ -149,8 +147,8 @@ func commitChanges(paths p.Paths, updatedList pkg.PackageList) error {
 
 	}
 
-	if _, err := wt.Add(indexFile); err != nil {
-		return fmt.Errorf("failed to add %q to working tree: %w", indexFile, err)
+	if _, err := wt.Add(paths.IndexYaml); err != nil {
+		return fmt.Errorf("failed to add %q to working tree: %w", paths.IndexYaml, err)
 	}
 	commitMessage := "Added chart versions:\n"
 	sort.Sort(updatedList)
@@ -906,7 +904,7 @@ func cullCharts(c *cli.Context) error {
 	}
 	days := int(daysInt64)
 
-	_, newerChartVersions, err := getOlderAndNewerChartVersions(days)
+	_, newerChartVersions, err := getOlderAndNewerChartVersions(paths, days)
 	if err != nil {
 		return fmt.Errorf("failed to get older and newer chart versions: %w", err)
 	}
@@ -961,8 +959,8 @@ func cullCharts(c *cli.Context) error {
 // of chart name to slices of versions, one version per chartVersion.
 // The older versions are the first return value and the newer
 // versions are the second return value.
-func getOlderAndNewerChartVersions(days int) (map[string][]string, map[string][]string, error) {
-	indexYaml, err := repo.LoadIndexFile(indexFile)
+func getOlderAndNewerChartVersions(paths p.Paths, days int) (map[string][]string, map[string][]string, error) {
+	indexYaml, err := repo.LoadIndexFile(paths.IndexYaml)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read index file: %w", err)
 	}
