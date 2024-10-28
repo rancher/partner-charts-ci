@@ -179,10 +179,10 @@ func commitChanges(paths p.Paths, updatedList pkg.PackageList) error {
 	return nil
 }
 
-func ApplyUpdates(packageWrapper pkg.PackageWrapper) error {
+func ApplyUpdates(paths p.Paths, packageWrapper pkg.PackageWrapper) error {
 	logrus.Debugf("Applying updates for package %s/%s\n", packageWrapper.Vendor, packageWrapper.Name)
 
-	existingCharts, err := loadExistingCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+	existingCharts, err := loadExistingCharts(paths.RepoRoot, packageWrapper.Vendor, packageWrapper.Name)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -211,7 +211,7 @@ func ApplyUpdates(packageWrapper pkg.PackageWrapper) error {
 	allCharts := make([]*ChartWrapper, 0, len(existingCharts)+len(newCharts))
 	allCharts = append(allCharts, existingCharts...)
 	allCharts = append(allCharts, newCharts...)
-	if err := writeCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name, allCharts); err != nil {
+	if err := writeCharts(paths.RepoRoot, packageWrapper.Vendor, packageWrapper.Name, allCharts); err != nil {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
@@ -654,7 +654,7 @@ func generateChanges(auto bool) {
 		}
 
 		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
-		updated, err := packageWrapper.Populate()
+		updated, err := packageWrapper.Populate(paths)
 		if err != nil {
 			logrus.Errorf("failed to populate %s: %s", packageWrapper.FullName(), err)
 			continue
@@ -679,7 +679,7 @@ func generateChanges(auto bool) {
 
 	skippedList := make([]string, 0)
 	for _, packageWrapper := range packageList {
-		if err := ApplyUpdates(packageWrapper); err != nil {
+		if err := ApplyUpdates(paths, packageWrapper); err != nil {
 			logrus.Errorf("failed to apply updates for chart %q: %s", packageWrapper.Name, err)
 			skippedList = append(skippedList, packageWrapper.Name)
 		}
