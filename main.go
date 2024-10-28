@@ -541,17 +541,16 @@ func getByAnnotation(paths p.Paths, annotation, value string) map[string]repo.Ch
 // but for the most part this function enforces the idea that the
 // index.yaml file should treat the charts' Chart.yaml files as the
 // authoritative source of chart metadata.
-func writeIndex() error {
-	indexFilePath := filepath.Join(p.GetRepoRoot(), indexFile)
+func writeIndex(paths p.Paths) error {
 	assetsDirectoryPath := filepath.Join(p.GetRepoRoot(), repositoryAssetsDir)
 	newHelmIndexYaml, err := repo.IndexDirectory(assetsDirectoryPath, repositoryAssetsDir)
 	if err != nil {
 		return fmt.Errorf("failed to index assets directory: %w", err)
 	}
 
-	oldHelmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
+	oldHelmIndexYaml, err := repo.LoadIndexFile(paths.IndexYaml)
 	if errors.Is(err, os.ErrNotExist) {
-		if err := newHelmIndexYaml.WriteFile(indexFilePath, 0o644); err != nil {
+		if err := newHelmIndexYaml.WriteFile(paths.IndexYaml, 0o644); err != nil {
 			return fmt.Errorf("failed to write index.yaml: %w", err)
 		}
 		return nil
@@ -591,7 +590,7 @@ func writeIndex() error {
 
 	newHelmIndexYaml.SortEntries()
 
-	if err := newHelmIndexYaml.WriteFile(indexFilePath, 0o644); err != nil {
+	if err := newHelmIndexYaml.WriteFile(paths.IndexYaml, 0o644); err != nil {
 		return fmt.Errorf("failed to write index.yaml: %w", err)
 	}
 
@@ -627,7 +626,7 @@ func ensureIcons(c *cli.Context) error {
 		}
 	}
 
-	if err := writeIndex(); err != nil {
+	if err := writeIndex(paths); err != nil {
 		return fmt.Errorf("failed to write index: %w", err)
 	}
 
@@ -691,7 +690,7 @@ func generateChanges(auto bool) {
 		logrus.Fatalf("All packages skipped. Exiting...")
 	}
 
-	if err := writeIndex(); err != nil {
+	if err := writeIndex(paths); err != nil {
 		logrus.Error(err)
 	}
 
@@ -764,7 +763,7 @@ func addFeaturedChart(c *cli.Context) error {
 		if err := annotate(paths, vendor, chartName, annotationFeatured, inputIndex, false, true); err != nil {
 			return fmt.Errorf("failed to annotate %q: %w", packageWrapper.FullName(), err)
 		}
-		if err := writeIndex(); err != nil {
+		if err := writeIndex(paths); err != nil {
 			return fmt.Errorf("failed to write index: %w", err)
 		}
 	}
@@ -792,7 +791,7 @@ func removeFeaturedChart(c *cli.Context) error {
 		return fmt.Errorf("failed to deannotate %q: %w", packageWrapper.FullName(), err)
 	}
 
-	if err := writeIndex(); err != nil {
+	if err := writeIndex(paths); err != nil {
 		return fmt.Errorf("failed to write index: %w", err)
 	}
 
@@ -857,7 +856,7 @@ func hideChart(c *cli.Context) error {
 	if err := annotate(paths, vendor, chartName, annotationHidden, "true", false, false); err != nil {
 		return fmt.Errorf("failed to annotate package: %w", err)
 	}
-	if err := writeIndex(); err != nil {
+	if err := writeIndex(paths); err != nil {
 		return fmt.Errorf("failed to write index: %w", err)
 	}
 
@@ -950,7 +949,7 @@ func cullCharts(c *cli.Context) error {
 		logrus.Fatal("all packages skipped")
 	}
 
-	if err := writeIndex(); err != nil {
+	if err := writeIndex(paths); err != nil {
 		return fmt.Errorf("failed to write index: %w", err)
 	}
 
@@ -1026,7 +1025,7 @@ func removePackage(c *cli.Context) error {
 		}
 	}
 
-	if err := writeIndex(); err != nil {
+	if err := writeIndex(paths); err != nil {
 		return fmt.Errorf("failed to write index: %w", err)
 	}
 
@@ -1068,7 +1067,7 @@ func deprecatePackage(c *cli.Context) error {
 		return fmt.Errorf("failed to write charts: %w", err)
 	}
 
-	if err := writeIndex(); err != nil {
+	if err := writeIndex(paths); err != nil {
 		return fmt.Errorf("failed to write index: %w", err)
 	}
 
