@@ -502,9 +502,8 @@ func ensureFeaturedAnnotation(existingCharts, newCharts []*ChartWrapper) error {
 // the specified annotation with the specified value. If value is "",
 // all repo.ChartVersions that have the specified annotation will be
 // returned, regardless of that annotation's value.
-func getByAnnotation(annotation, value string) map[string]repo.ChartVersions {
-	indexFilePath := filepath.Join(p.GetRepoRoot(), indexFile)
-	indexYaml, err := repo.LoadIndexFile(indexFilePath)
+func getByAnnotation(paths p.Paths, annotation, value string) map[string]repo.ChartVersions {
+	indexYaml, err := repo.LoadIndexFile(paths.IndexYaml)
 	if err != nil {
 		logrus.Fatalf("failed to read index.yaml: %s", err)
 	}
@@ -753,7 +752,7 @@ func addFeaturedChart(c *cli.Context) error {
 	}
 	packageWrapper := packageList[0]
 
-	featuredVersions := getByAnnotation(annotationFeatured, inputIndex)
+	featuredVersions := getByAnnotation(paths, annotationFeatured, inputIndex)
 	if len(featuredVersions) > 0 {
 		for chartName := range featuredVersions {
 			logrus.Errorf("%s already featured at index %d\n", chartName, featuredNumber)
@@ -803,7 +802,8 @@ func removeFeaturedChart(c *cli.Context) error {
 func listFeaturedCharts(c *cli.Context) {
 	indexConflict := false
 	featuredSorted := make([]string, featuredMax)
-	featuredVersions := getByAnnotation(annotationFeatured, "")
+	paths := p.Get()
+	featuredVersions := getByAnnotation(paths, annotationFeatured, "")
 
 	for chartName, chartVersion := range featuredVersions {
 		featuredIndex, err := strconv.Atoi(chartVersion[0].Annotations[annotationFeatured])
