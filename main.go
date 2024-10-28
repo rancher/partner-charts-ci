@@ -41,8 +41,6 @@ const (
 	annotationReleaseName  = "catalog.cattle.io/release-name"
 	//packageEnvVariable sets the environment variable to check for a package name
 	packageEnvVariable = "PACKAGE"
-	//repositoryChartsDir sets the directory name for stored charts
-	repositoryChartsDir = "charts"
 	//repositoryPackagesDir sets the directory name for package configurations
 	repositoryPackagesDir = "packages"
 	featuredMax           = 5
@@ -120,7 +118,7 @@ func commitChanges(paths p.Paths, updatedList pkg.PackageList) error {
 
 	for _, packageWrapper := range updatedList {
 		assetsPath := filepath.Join(paths.Assets, packageWrapper.Vendor)
-		chartsPath := filepath.Join(repositoryChartsDir, packageWrapper.Vendor, packageWrapper.Name)
+		chartsPath := filepath.Join(paths.Charts, packageWrapper.Vendor, packageWrapper.Name)
 		packagesPath := filepath.Join(repositoryPackagesDir, packageWrapper.Vendor, packageWrapper.Name)
 
 		for _, path := range []string{assetsPath, chartsPath, packagesPath} {
@@ -997,7 +995,7 @@ func removePackage(c *cli.Context) error {
 
 	removalPaths := []string{
 		filepath.Join(p.GetRepoRoot(), repositoryPackagesDir, packageWrapper.Vendor, packageWrapper.Name),
-		filepath.Join(p.GetRepoRoot(), repositoryChartsDir, packageWrapper.Vendor, packageWrapper.Name),
+		filepath.Join(paths.Charts, packageWrapper.Vendor, packageWrapper.Name),
 	}
 
 	assetFiles, err := getExistingChartTgzFiles(paths, packageWrapper.Vendor, packageWrapper.Name)
