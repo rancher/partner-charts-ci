@@ -75,7 +75,7 @@ func NewChartWrapper(helmChart *chart.Chart) *ChartWrapper {
 }
 
 func annotate(paths p.Paths, vendor, chartName, annotation, value string, remove, onlyLatest bool) error {
-	existingCharts, err := loadExistingCharts(paths.RepoRoot, vendor, chartName)
+	existingCharts, err := loadExistingCharts(paths, vendor, chartName)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -182,7 +182,7 @@ func commitChanges(paths p.Paths, updatedList pkg.PackageList) error {
 func ApplyUpdates(paths p.Paths, packageWrapper pkg.PackageWrapper) error {
 	logrus.Debugf("Applying updates for package %s/%s\n", packageWrapper.Vendor, packageWrapper.Name)
 
-	existingCharts, err := loadExistingCharts(paths.RepoRoot, packageWrapper.Vendor, packageWrapper.Name)
+	existingCharts, err := loadExistingCharts(paths, packageWrapper.Vendor, packageWrapper.Name)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -238,7 +238,7 @@ func writeCharts(paths p.Paths, vendor, chartName string, chartWrappers []*Chart
 	}
 
 	// delete any charts on disk that are not in chartWrappers
-	existingCharts, err := loadExistingCharts(paths.RepoRoot, vendor, chartName)
+	existingCharts, err := loadExistingCharts(paths, vendor, chartName)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}
@@ -283,8 +283,8 @@ func writeCharts(paths p.Paths, vendor, chartName string, chartWrappers []*Chart
 // loadExistingCharts loads the existing charts for package
 // <vendor>/<packageName> from the assets directory. It returns
 // them in a slice that is sorted by chart version, newest first.
-func loadExistingCharts(repoRoot string, vendor string, packageName string) ([]*ChartWrapper, error) {
-	existingChartPaths, err := getExistingChartTgzFiles(repoRoot, vendor, packageName)
+func loadExistingCharts(paths p.Paths, vendor string, packageName string) ([]*ChartWrapper, error) {
+	existingChartPaths, err := getExistingChartTgzFiles(paths, vendor, packageName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get paths to existing chart tgz files: %w", err)
 	}
@@ -307,8 +307,8 @@ func loadExistingCharts(repoRoot string, vendor string, packageName string) ([]*
 
 // getExistingChartTgzFiles lists the .tgz files for package <vendor>/
 // <packageName> from that package vendor's assets directory.
-func getExistingChartTgzFiles(repoRoot string, vendor string, packageName string) ([]string, error) {
-	assetsPath := filepath.Join(repoRoot, repositoryAssetsDir, vendor)
+func getExistingChartTgzFiles(paths p.Paths, vendor string, packageName string) ([]string, error) {
+	assetsPath := filepath.Join(paths.Assets, vendor)
 	tgzFiles, err := os.ReadDir(assetsPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return []string{}, nil
@@ -614,7 +614,7 @@ func ensureIcons(c *cli.Context) error {
 		if _, err := icons.GetDownloadedIconPath(packageWrapper.Name); err == nil {
 			continue
 		}
-		existingCharts, err := loadExistingCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+		existingCharts, err := loadExistingCharts(paths, packageWrapper.Vendor, packageWrapper.Name)
 		if err != nil {
 			logrus.Errorf("failed to load existing charts for package %s: %s", packageWrapper.FullName(), err)
 		}
@@ -915,7 +915,7 @@ func cullCharts(c *cli.Context) error {
 	skippedPackages := make([]string, 0, len(packageWrappers))
 	for _, packageWrapper := range packageWrappers {
 		logrus.Infof("culling %s", packageWrapper.FullName())
-		existingCharts, err := loadExistingCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+		existingCharts, err := loadExistingCharts(paths, packageWrapper.Vendor, packageWrapper.Name)
 		if err != nil {
 			logrus.Errorf("failed to load existing charts for %q: %s", packageWrapper.FullName(), err)
 			skippedPackages = append(skippedPackages, packageWrapper.FullName())
@@ -1006,7 +1006,7 @@ func removePackage(c *cli.Context) error {
 		filepath.Join(p.GetRepoRoot(), repositoryChartsDir, packageWrapper.Vendor, packageWrapper.Name),
 	}
 
-	assetFiles, err := getExistingChartTgzFiles(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+	assetFiles, err := getExistingChartTgzFiles(paths, packageWrapper.Vendor, packageWrapper.Name)
 	if err != nil {
 		return fmt.Errorf("failed to list asset files for %s: %w", packageWrapper.FullName(), err)
 	}
@@ -1053,7 +1053,7 @@ func deprecatePackage(c *cli.Context) error {
 	}
 
 	// set deprecated: true in each chart version's Chart.yaml
-	chartWrappers, err := loadExistingCharts(p.GetRepoRoot(), packageWrapper.Vendor, packageWrapper.Name)
+	chartWrappers, err := loadExistingCharts(paths, packageWrapper.Vendor, packageWrapper.Name)
 	if err != nil {
 		return fmt.Errorf("failed to load existing charts: %w", err)
 	}

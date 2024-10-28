@@ -425,7 +425,8 @@ func TestMain(t *testing.T) {
 			vendor := "f5"
 			packageName := "nginx-ingress"
 			repoRoot := filepath.Join("testdata", "loadExistingCharts")
-			chartWrappers, err := loadExistingCharts(repoRoot, vendor, packageName)
+			paths := getPaths(t, repoRoot)
+			chartWrappers, err := loadExistingCharts(paths, vendor, packageName)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}
@@ -472,7 +473,7 @@ func TestMain(t *testing.T) {
 			if err := writeCharts(paths, vendor, chartName, newCharts); err != nil {
 				t.Fatalf("unexpected error in writeCharts: %s", err)
 			}
-			chartsFromDisk, err := loadExistingCharts(paths.RepoRoot, vendor, chartName)
+			chartsFromDisk, err := loadExistingCharts(paths, vendor, chartName)
 			if err != nil {
 				t.Fatalf("unexpected error in loadExistingCharts: %s", err)
 			}
@@ -521,7 +522,7 @@ func TestMain(t *testing.T) {
 			if err := writeCharts(paths, vendor, chartName, newCharts[0:2]); err != nil {
 				t.Fatalf("unexpected error in second writeCharts call: %s", err)
 			}
-			chartsFromDisk, err := loadExistingCharts(paths.RepoRoot, vendor, chartName)
+			chartsFromDisk, err := loadExistingCharts(paths, vendor, chartName)
 			if err != nil {
 				t.Fatalf("unexpected error in loadExistingCharts: %s", err)
 			}
@@ -560,7 +561,7 @@ func TestMain(t *testing.T) {
 			if err := writeCharts(paths, vendor, chartName, newCharts); err != nil {
 				t.Fatalf("unexpected error in first call of writeCharts: %s", err)
 			}
-			chartsFromDisk, err := loadExistingCharts(paths.RepoRoot, vendor, chartName)
+			chartsFromDisk, err := loadExistingCharts(paths, vendor, chartName)
 			if err != nil {
 				t.Fatalf("unexpected error in first call of loadExistingCharts: %s", err)
 			}
@@ -576,7 +577,7 @@ func TestMain(t *testing.T) {
 			if err := writeCharts(paths, vendor, chartName, chartsFromDisk); err != nil {
 				t.Fatalf("unexpected error in second call of writeCharts: %s", err)
 			}
-			newChartsFromDisk, err := loadExistingCharts(paths.RepoRoot, vendor, chartName)
+			newChartsFromDisk, err := loadExistingCharts(paths, vendor, chartName)
 			if err != nil {
 				t.Fatalf("unexpected error in second call of loadExistingCharts: %s", err)
 			}
