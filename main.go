@@ -102,42 +102,6 @@ func annotate(paths p.Paths, vendor, chartName, annotation, value string, remove
 	return nil
 }
 
-func gitCleanup() error {
-	r, err := git.PlainOpen(p.GetRepoRoot())
-	if err != nil {
-		return err
-	}
-
-	wt, err := r.Worktree()
-	if err != nil {
-		return err
-	}
-
-	cleanOptions := git.CleanOptions{
-		Dir: true,
-	}
-
-	branch, err := r.Head()
-	if err != nil {
-		return err
-	}
-
-	logrus.Debugf("Branch: %s\n", branch.Name())
-	checkoutOptions := git.CheckoutOptions{
-		Branch: branch.Name(),
-		Force:  true,
-	}
-
-	err = wt.Clean(&cleanOptions)
-	if err != nil {
-		return err
-	}
-
-	err = wt.Checkout(&checkoutOptions)
-
-	return err
-}
-
 // Commits changes to index file, assets, charts, and packages
 func commitChanges(updatedList pkg.PackageList) error {
 	commitOptions := git.CommitOptions{}
@@ -908,13 +872,6 @@ func stageChanges(c *cli.Context) {
 	generateChanges(false)
 }
 
-func unstageChanges(c *cli.Context) {
-	err := gitCleanup()
-	if err != nil {
-		logrus.Error(err)
-	}
-}
-
 // CLI function call - Generates automated commit
 func autoUpdate(c *cli.Context) {
 	generateChanges(true)
@@ -1144,11 +1101,6 @@ func main() {
 			Name:   "stage",
 			Usage:  "Stage all changes. Does not commit",
 			Action: stageChanges,
-		},
-		{
-			Name:   "unstage",
-			Usage:  "Un-Stage all non-committed changes. Deletes all untracked files.",
-			Action: unstageChanges,
 		},
 		{
 			Name:   "hide",
