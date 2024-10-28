@@ -44,6 +44,8 @@ func Get() Paths {
 
 // GetRepoRoot fetches absolute repository root path. If the working directory
 // is not the root of a git repo, exits the program with an error.
+// TODO: remove this function. Only paths.Get() should be used to get access
+// to paths data.
 func GetRepoRoot() string {
 	repoRoot, err := os.Getwd()
 	if err != nil {
