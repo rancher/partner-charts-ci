@@ -34,7 +34,6 @@ type UpstreamYaml struct {
 	Hidden             bool           `json:"Hidden,omitempty"`
 	Namespace          string         `json:"Namespace,omitempty"`
 	PackageVersion     int            `json:"PackageVersion,omitempty"`
-	TrackVersions      []string       `json:"TrackVersions,omitempty"`
 	ReleaseName        string         `json:"ReleaseName,omitempty"`
 	Vendor             string         `json:"Vendor,omitempty"`
 }
@@ -55,13 +54,6 @@ func (upstreamYaml *UpstreamYaml) validate() error {
 	}
 	if upstreamYaml.Fetch != "latest" && upstreamYaml.HelmRepo == "" {
 		return errors.New("Fetch is latest but HelmRepo is not set")
-	}
-
-	if len(upstreamYaml.TrackVersions) != 0 && upstreamYaml.HelmChart == "" {
-		return errors.New("TrackVersions is set but HelmChart is not set")
-	}
-	if len(upstreamYaml.TrackVersions) != 0 && upstreamYaml.HelmRepo == "" {
-		return errors.New("TrackVersions is set but HelmRepo is not set")
 	}
 
 	if upstreamYaml.ArtifactHubPackage != "" && upstreamYaml.ArtifactHubRepo == "" {

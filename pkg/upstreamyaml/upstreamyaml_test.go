@@ -125,26 +125,6 @@ func TestMain(t *testing.T) {
 				assert.ErrorContains(t, err, "HelmRepo is set but HelmChart is not set")
 			})
 
-			t.Run("if TrackVersions is set, HelmChart must be set", func(t *testing.T) {
-				upstreamYaml := UpstreamYaml{
-					Fetch:         "latest",
-					TrackVersions: []string{"2.14"},
-					HelmRepo:      "https://example.com",
-				}
-				err := upstreamYaml.validate()
-				assert.ErrorContains(t, err, "TrackVersions is set but HelmChart is not set")
-			})
-
-			t.Run("if TrackVersions is set, HelmRepo must be set", func(t *testing.T) {
-				upstreamYaml := UpstreamYaml{
-					Fetch:         "latest",
-					TrackVersions: []string{"2.14"},
-					HelmChart:     "test-chart",
-				}
-				err := upstreamYaml.validate()
-				assert.ErrorContains(t, err, "TrackVersions is set but HelmRepo is not set")
-			})
-
 			t.Run("one of ArtifactHubPackage and ArtifactHubRepo, GitRepo, or HelmRepo and HelmChart must be present", func(t *testing.T) {
 				upstreamYaml := UpstreamYaml{
 					Fetch: "latest",
