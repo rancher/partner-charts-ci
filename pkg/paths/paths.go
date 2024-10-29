@@ -22,7 +22,7 @@ type Paths struct {
 	RepoRoot          string
 }
 
-func Get() Paths {
+func GetPaths() Paths {
 	if paths == nil {
 		// TODO: once GetRepoRoot is no longer used, remove this call and inline
 		// necessary parts of the code. We call it here in order to make sure
