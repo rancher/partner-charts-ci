@@ -2,10 +2,9 @@ package paths
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/sirupsen/logrus"
 )
 
 var paths *Paths
@@ -22,12 +21,20 @@ type Paths struct {
 	RepoRoot          string
 }
 
-func GetPaths() Paths {
+func GetPaths() (Paths, error) {
 	if paths == nil {
-		// TODO: once GetRepoRoot is no longer used, remove this call and inline
-		// necessary parts of the code. We call it here in order to make sure
-		// we are at the repository root.
-		repoRoot := GetRepoRoot()
+		// Check that we are at the root of a git repo
+		repoRoot, err := os.Getwd()
+		if err != nil {
+			return Paths{}, fmt.Errorf("failed to get working directory: %w", err)
+		}
+		gitDirPath := filepath.Join(repoRoot, ".git")
+		if fileInfo, err := os.Stat(gitDirPath); errors.Is(err, os.ErrNotExist) || !fileInfo.IsDir() {
+			return Paths{}, errors.New("must be at the root of a git repo")
+		} else if err != nil {
+			return Paths{}, fmt.Errorf("failed to stat .git/: %w", err)
+		}
+
 		assets := "assets"
 		paths = &Paths{
 			Assets:            assets,
@@ -39,26 +46,5 @@ func GetPaths() Paths {
 			RepoRoot:          repoRoot,
 		}
 	}
-	return *paths
-}
-
-// GetRepoRoot fetches absolute repository root path. If the working directory
-// is not the root of a git repo, exits the program with an error.
-// TODO: remove this function. Only paths.Get() should be used to get access
-// to paths data.
-func GetRepoRoot() string {
-	repoRoot, err := os.Getwd()
-	if err != nil {
-		logrus.Fatalf("failed to get working directory: %s", err)
-	}
-
-	gitDirPath := filepath.Join(repoRoot, ".git")
-	if fileInfo, err := os.Stat(gitDirPath); err == nil && fileInfo.IsDir() {
-		return repoRoot
-	} else if errors.Is(err, os.ErrNotExist) || !fileInfo.IsDir() {
-		logrus.Fatalf("must be at the root of a git repo")
-	}
-
-	logrus.Fatalf("failed to check whether working directory is root of git repo: %s", err)
-	return ""
+	return *paths, nil
 }

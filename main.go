@@ -600,7 +600,10 @@ func writeIndex(paths p.Paths) error {
 //     path of the downloaded icon
 func ensureIcons(c *cli.Context) error {
 	currentPackage := os.Getenv(packageEnvVariable)
-	paths := p.GetPaths()
+	paths, err := p.GetPaths()
+	if err != nil {
+		return fmt.Errorf("failed to get paths: %w", err)
+	}
 
 	packageWrappers, err := pkg.ListPackageWrappers(paths, currentPackage)
 	if err != nil {
@@ -636,7 +639,10 @@ func ensureIcons(c *cli.Context) error {
 // the changes will be applied on fetchUpstreams function
 func generateChanges(auto bool) {
 	currentPackage := os.Getenv(packageEnvVariable)
-	paths := p.GetPaths()
+	paths, err := p.GetPaths()
+	if err != nil {
+		logrus.Fatalf("failed to get paths: %s", err)
+	}
 	packageWrappers, err := pkg.ListPackageWrappers(paths, currentPackage)
 	if err != nil {
 		logrus.Fatalf("failed to list packages: %s", err)
@@ -701,7 +707,10 @@ func generateChanges(auto bool) {
 // listPackages prints out the packages in the current repository.
 func listPackages(c *cli.Context) error {
 	currentPackage := os.Getenv(packageEnvVariable)
-	paths := p.GetPaths()
+	paths, err := p.GetPaths()
+	if err != nil {
+		return fmt.Errorf("failed to get paths: %w", err)
+	}
 	packageWrappers, err := pkg.ListPackageWrappers(paths, currentPackage)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
@@ -729,7 +738,10 @@ func addFeaturedChart(c *cli.Context) error {
 		return fmt.Errorf("featured number must be between %d and %d\n", 1, featuredMax)
 	}
 
-	paths := p.GetPaths()
+	paths, err := p.GetPaths()
+	if err != nil {
+		return fmt.Errorf("failed to get paths: %w", err)
+	}
 	packageList, err := pkg.ListPackageWrappers(paths, featuredChart)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
@@ -744,7 +756,10 @@ func addFeaturedChart(c *cli.Context) error {
 	} else {
 		vendor := packageWrapper.Vendor
 		chartName := packageWrapper.Name
-		paths := p.GetPaths()
+		paths, err := p.GetPaths()
+		if err != nil {
+			return fmt.Errorf("failed to get paths: %w", err)
+		}
 		if err := annotate(paths, vendor, chartName, annotationFeatured, inputIndex, false, true); err != nil {
 			return fmt.Errorf("failed to annotate %q: %w", packageWrapper.FullName(), err)
 		}
@@ -762,7 +777,10 @@ func removeFeaturedChart(c *cli.Context) error {
 		logrus.Fatal("Please provide the chart name as argument")
 	}
 	featuredChart := c.Args().Get(0)
-	paths := p.GetPaths()
+	paths, err := p.GetPaths()
+	if err != nil {
+		return fmt.Errorf("failed to get paths: %w", err)
+	}
 
 	packageList, err := pkg.ListPackageWrappers(paths, featuredChart)
 	if err != nil {
@@ -786,7 +804,10 @@ func removeFeaturedChart(c *cli.Context) error {
 func listFeaturedCharts(c *cli.Context) {
 	indexConflict := false
 	featuredSorted := make([]string, featuredMax)
-	paths := p.GetPaths()
+	paths, err := p.GetPaths()
+	if err != nil {
+		logrus.Fatalf("failed to get paths: %s", err)
+	}
 	featuredVersions := getByAnnotation(paths, annotationFeatured, "")
 
 	for chartName, chartVersion := range featuredVersions {
@@ -821,7 +842,10 @@ func hideChart(c *cli.Context) error {
 		logrus.Fatal("Must provide exactly one package name as argument")
 	}
 	currentPackage := c.Args().Get(0)
-	paths := p.GetPaths()
+	paths, err := p.GetPaths()
+	if err != nil {
+		return fmt.Errorf("failed to get paths: %w", err)
+	}
 
 	packageWrappers, err := pkg.ListPackageWrappers(paths, currentPackage)
 	if err != nil {
@@ -862,7 +886,10 @@ func autoUpdate(c *cli.Context) {
 
 // CLI function call - Validates repo against released
 func validateRepo(c *cli.Context) error {
-	paths := p.GetPaths()
+	paths, err := p.GetPaths()
+	if err != nil {
+		return fmt.Errorf("failed to get paths: %w", err)
+	}
 	configYaml, err := validate.ReadConfig(paths.ConfigurationYaml)
 	if err != nil {
 		logrus.Fatalf("failed to read configuration.yaml: %s\n", err)
@@ -878,7 +905,10 @@ func validateRepo(c *cli.Context) error {
 // used to work on a single package.
 func cullCharts(c *cli.Context) error {
 	currentPackage := os.Getenv(packageEnvVariable)
-	paths := p.GetPaths()
+	paths, err := p.GetPaths()
+	if err != nil {
+		return fmt.Errorf("failed to get paths: %w", err)
+	}
 	packageWrappers, err := pkg.ListPackageWrappers(paths, currentPackage)
 	if err != nil {
 		return fmt.Errorf("failed to list packages: %w", err)
@@ -974,7 +1004,10 @@ func removePackage(c *cli.Context) error {
 		return errors.New("must provide package name as argument")
 	}
 	currentPackage := c.Args().Get(0)
-	paths := p.GetPaths()
+	paths, err := p.GetPaths()
+	if err != nil {
+		return fmt.Errorf("failed to get paths: %w", err)
+	}
 
 	packageWrappers, err := pkg.ListPackageWrappers(paths, currentPackage)
 	if err != nil {
@@ -1022,7 +1055,10 @@ func deprecatePackage(c *cli.Context) error {
 		return errors.New("must provide package name as argument")
 	}
 	currentPackage := c.Args().Get(0)
-	paths := p.GetPaths()
+	paths, err := p.GetPaths()
+	if err != nil {
+		return fmt.Errorf("failed to get paths: %w", err)
+	}
 
 	packageWrappers, err := pkg.ListPackageWrappers(paths, currentPackage)
 	if err != nil {
