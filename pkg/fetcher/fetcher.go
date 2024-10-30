@@ -64,17 +64,20 @@ func fetchUpstreamHelmrepo(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceM
 
 	resp, err := http.Get(url)
 	if err != nil {
-		return chartSourceMeta, err
+		return chartSourceMeta, fmt.Errorf("request to %s failed: %w", url, err)
+	}
+	if resp.StatusCode >= 300 {
+		return chartSourceMeta, fmt.Errorf("request to %s returned response %q", url, resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return chartSourceMeta, err
+		return chartSourceMeta, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	err = yaml.Unmarshal([]byte(body), indexYaml)
 	if err != nil {
-		return chartSourceMeta, err
+		return chartSourceMeta, fmt.Errorf("failed to unmarshal response body: %w", err)
 	}
 	if _, ok := indexYaml.Entries[upstreamYaml.HelmChart]; !ok {
 		return chartSourceMeta, fmt.Errorf("Helm chart: %s/%s not found", upstreamYaml.HelmRepo, upstreamYaml.HelmChart)
