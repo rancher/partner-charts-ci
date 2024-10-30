@@ -595,45 +595,6 @@ func writeIndex(paths p.Paths) error {
 	return nil
 }
 
-// ensureIcons ensures that:
-//  1. Each package has a valid icon file in assets/icons
-//  2. Each chartVersion in index.yaml has its icon URL set to the local
-//     path of the downloaded icon
-func ensureIcons(c *cli.Context) error {
-	currentPackage := os.Getenv(packageEnvVariable)
-	paths, err := p.GetPaths()
-	if err != nil {
-		return fmt.Errorf("failed to get paths: %w", err)
-	}
-
-	packageWrappers, err := pkg.ListPackageWrappers(paths, currentPackage)
-	if err != nil {
-		return fmt.Errorf("failed to list packages: %w", err)
-	}
-
-	for _, packageWrapper := range packageWrappers {
-		if _, err := icons.GetDownloadedIconPath(packageWrapper.Name); err == nil {
-			continue
-		}
-		existingCharts, err := loadExistingCharts(paths, packageWrapper.Vendor, packageWrapper.Name)
-		if err != nil {
-			logrus.Errorf("failed to load existing charts for package %s: %s", packageWrapper.FullName(), err)
-		}
-		if len(existingCharts) == 0 {
-			logrus.Errorf("found no existing charts for package %q", packageWrapper.FullName())
-		}
-		if _, err := icons.EnsureIconDownloaded(paths, existingCharts[0].Metadata.Icon, packageWrapper.Name); err != nil {
-			logrus.Errorf("failed to ensure icon downloaded for package %q: %s", packageWrapper.FullName(), err)
-		}
-	}
-
-	if err := writeIndex(paths); err != nil {
-		return fmt.Errorf("failed to write index: %w", err)
-	}
-
-	return nil
-}
-
 // listPackages prints out the packages in the current repository.
 func listPackages(c *cli.Context) error {
 	currentPackage := os.Getenv(packageEnvVariable)
@@ -1139,11 +1100,6 @@ func main() {
 			Name:   "validate",
 			Usage:  "Check repo against released charts",
 			Action: validateRepo,
-		},
-		{
-			Name:   "ensure-icons",
-			Usage:  "Ensure icons are downloaded and that chart versions in index.yaml use them",
-			Action: ensureIcons,
 		},
 		{
 			Name:      "cull",
