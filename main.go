@@ -1050,12 +1050,12 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "partner-charts-ci"
 	app.Version = fmt.Sprintf("%s (%s)", version, commit)
-	app.Usage = "Assists in submission and maintenance of partner Helm charts"
+	app.Usage = "A tool for working with the Rancher Partner Charts helm chart repository"
 
 	app.Commands = []cli.Command{
 		{
 			Name:   "list",
-			Usage:  "Print a list of all tracked upstreams in current repository",
+			Usage:  "List packages",
 			Action: listPackages,
 		},
 		{
@@ -1077,7 +1077,7 @@ func main() {
 		},
 		{
 			Name:  "feature",
-			Usage: "Manipulate charts featured in Rancher UI",
+			Usage: "Commands related to the 'catalog.cattle.io/featured' annotation",
 			Subcommands: []cli.Command{
 				{
 					Name:   "list",
@@ -1086,24 +1086,24 @@ func main() {
 				},
 				{
 					Name:   "add",
-					Usage:  "Add featured annotation to chart",
+					Usage:  "Add 'catalog.cattle.io/featured' annotation to chart",
 					Action: addFeaturedChart,
 				},
 				{
 					Name:   "remove",
-					Usage:  "Remove featured annotation from chart",
+					Usage:  "Remove 'catalog.cattle.io/featured' annotation from chart",
 					Action: removeFeaturedChart,
 				},
 			},
 		},
 		{
 			Name:   "validate",
-			Usage:  "Check repo against released charts",
+			Usage:  "Run validations on the repository",
 			Action: validateRepo,
 		},
 		{
 			Name:      "cull",
-			Usage:     "Remove versions of charts older than a number of days",
+			Usage:     "Remove chart versions older than a number of days",
 			Action:    cullCharts,
 			ArgsUsage: "<days>",
 		},
