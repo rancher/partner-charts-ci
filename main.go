@@ -872,13 +872,6 @@ func hideChart(c *cli.Context) error {
 	return nil
 }
 
-// CLI function call - Generates all changes for available packages,
-// Checking against upstream version, prepare, patch, clean, and index update
-// Does not commit
-func stageChanges(c *cli.Context) {
-	generateChanges(false)
-}
-
 // CLI function call - Generates automated commit
 func autoUpdate(c *cli.Context) {
 	generateChanges(true)
@@ -1115,11 +1108,6 @@ func main() {
 			Name:   "auto",
 			Usage:  "Generate and commit changes",
 			Action: autoUpdate,
-		},
-		{
-			Name:   "stage",
-			Usage:  "Stage all changes. Does not commit",
-			Action: stageChanges,
 		},
 		{
 			Name:   "hide",
