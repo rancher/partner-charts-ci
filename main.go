@@ -633,77 +633,6 @@ func ensureIcons(c *cli.Context) error {
 	return nil
 }
 
-// generateChanges will generate the changes for the packages based on the flags provided
-// if auto or stage is true, it will write the index.yaml file if the chart has new updates
-// the charts to be modified depends on the populatePackages function and their update status
-// the changes will be applied on fetchUpstreams function
-func generateChanges(auto bool) {
-	currentPackage := os.Getenv(packageEnvVariable)
-	paths, err := p.GetPaths()
-	if err != nil {
-		logrus.Fatalf("failed to get paths: %s", err)
-	}
-	packageWrappers, err := pkg.ListPackageWrappers(paths, currentPackage)
-	if err != nil {
-		logrus.Fatalf("failed to list packages: %s", err)
-	}
-
-	packageList := make([]pkg.PackageWrapper, 0, len(packageWrappers))
-	for _, packageWrapper := range packageWrappers {
-		if packageWrapper.UpstreamYaml.Deprecated {
-			logrus.Warnf("Package %s is deprecated; skipping update", packageWrapper.FullName())
-			continue
-		}
-
-		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
-		updated, err := packageWrapper.Populate(paths)
-		if err != nil {
-			logrus.Errorf("failed to populate %s: %s", packageWrapper.FullName(), err)
-			continue
-		}
-
-		if len(packageWrapper.FetchVersions) == 0 {
-			logrus.Infof("%s is up-to-date\n", packageWrapper.FullName())
-		}
-		for _, version := range packageWrapper.FetchVersions {
-			logrus.Infof("\n  Package: %s\n  Source: %s\n  Version: %s\n  URL: %s  \n",
-				packageWrapper.FullName(), packageWrapper.SourceMetadata.Source, version.Version, version.URLs[0])
-		}
-
-		if updated {
-			packageList = append(packageList, packageWrapper)
-		}
-	}
-
-	if len(packageList) == 0 {
-		return
-	}
-
-	skippedList := make([]string, 0)
-	for _, packageWrapper := range packageList {
-		if err := ApplyUpdates(paths, packageWrapper); err != nil {
-			logrus.Errorf("failed to apply updates for chart %q: %s", packageWrapper.Name, err)
-			skippedList = append(skippedList, packageWrapper.Name)
-		}
-	}
-	if len(skippedList) > 0 {
-		logrus.Errorf("Skipped due to error: %v", skippedList)
-	}
-	if len(skippedList) >= len(packageList) {
-		logrus.Fatalf("All packages skipped. Exiting...")
-	}
-
-	if err := writeIndex(paths); err != nil {
-		logrus.Error(err)
-	}
-
-	if auto {
-		if err := commitChanges(paths, packageList); err != nil {
-			logrus.Fatal(err)
-		}
-	}
-}
-
 // listPackages prints out the packages in the current repository.
 func listPackages(c *cli.Context) error {
 	currentPackage := os.Getenv(packageEnvVariable)
@@ -874,7 +803,68 @@ func hideChart(c *cli.Context) error {
 
 // CLI function call - Generates automated commit
 func autoUpdate(c *cli.Context) {
-	generateChanges(true)
+	currentPackage := os.Getenv(packageEnvVariable)
+	paths, err := p.GetPaths()
+	if err != nil {
+		logrus.Fatalf("failed to get paths: %s", err)
+	}
+	packageWrappers, err := pkg.ListPackageWrappers(paths, currentPackage)
+	if err != nil {
+		logrus.Fatalf("failed to list packages: %s", err)
+	}
+
+	packageList := make([]pkg.PackageWrapper, 0, len(packageWrappers))
+	for _, packageWrapper := range packageWrappers {
+		if packageWrapper.UpstreamYaml.Deprecated {
+			logrus.Warnf("Package %s is deprecated; skipping update", packageWrapper.FullName())
+			continue
+		}
+
+		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
+		updated, err := packageWrapper.Populate(paths)
+		if err != nil {
+			logrus.Errorf("failed to populate %s: %s", packageWrapper.FullName(), err)
+			continue
+		}
+
+		if len(packageWrapper.FetchVersions) == 0 {
+			logrus.Infof("%s is up-to-date\n", packageWrapper.FullName())
+		}
+		for _, version := range packageWrapper.FetchVersions {
+			logrus.Infof("\n  Package: %s\n  Source: %s\n  Version: %s\n  URL: %s  \n",
+				packageWrapper.FullName(), packageWrapper.SourceMetadata.Source, version.Version, version.URLs[0])
+		}
+
+		if updated {
+			packageList = append(packageList, packageWrapper)
+		}
+	}
+
+	if len(packageList) == 0 {
+		return
+	}
+
+	skippedList := make([]string, 0)
+	for _, packageWrapper := range packageList {
+		if err := ApplyUpdates(paths, packageWrapper); err != nil {
+			logrus.Errorf("failed to apply updates for chart %q: %s", packageWrapper.Name, err)
+			skippedList = append(skippedList, packageWrapper.Name)
+		}
+	}
+	if len(skippedList) > 0 {
+		logrus.Errorf("Skipped due to error: %v", skippedList)
+	}
+	if len(skippedList) >= len(packageList) {
+		logrus.Fatalf("All packages skipped. Exiting...")
+	}
+
+	if err := writeIndex(paths); err != nil {
+		logrus.Error(err)
+	}
+
+	if err := commitChanges(paths, packageList); err != nil {
+		logrus.Fatal(err)
+	}
 }
 
 // CLI function call - Validates repo against released
