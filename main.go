@@ -45,9 +45,10 @@ const (
 )
 
 var (
-	version = "v0.0.0"
-	commit  = "HEAD"
-	force   = false
+	version    = "v0.0.0"
+	commit     = "HEAD"
+	force      = false
+	makeCommit = false
 )
 
 // ChartWrapper is like a chart.Chart, but it tracks whether the chart
@@ -862,8 +863,10 @@ func autoUpdate(c *cli.Context) {
 		logrus.Error(err)
 	}
 
-	if err := commitChanges(paths, packageList); err != nil {
-		logrus.Fatal(err)
+	if makeCommit {
+		if err := commitChanges(paths, packageList); err != nil {
+			logrus.Fatal(err)
+		}
 	}
 }
 
@@ -1098,6 +1101,13 @@ func main() {
 			Name:   "auto",
 			Usage:  "Generate and commit changes",
 			Action: autoUpdate,
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:        "commit, c",
+					Usage:       "Commit any changes",
+					Destination: &makeCommit,
+				},
+			},
 		},
 		{
 			Name:   "hide",
