@@ -4,12 +4,27 @@ import (
 	"path/filepath"
 	"testing"
 
+	p "github.com/rancher/partner-charts-ci/pkg/paths"
 	"github.com/rancher/partner-charts-ci/pkg/pkg"
 	"github.com/rancher/partner-charts-ci/pkg/upstreamyaml"
 	"github.com/stretchr/testify/assert"
 
 	"helm.sh/helm/v3/pkg/chart"
 )
+
+func getPaths(t *testing.T, repoRoot string) p.Paths {
+	t.Helper()
+	assets := filepath.Join(repoRoot, "assets")
+	return p.Paths{
+		RepoRoot:          repoRoot,
+		Assets:            assets,
+		Charts:            filepath.Join(repoRoot, "charts"),
+		ConfigurationYaml: filepath.Join(repoRoot, "configuration.yaml"),
+		Icons:             filepath.Join(assets, "icons"),
+		IndexYaml:         filepath.Join(repoRoot, "index.yaml"),
+		Packages:          filepath.Join(repoRoot, "packages"),
+	}
+}
 
 func TestMain(t *testing.T) {
 	t.Run("applyOverlayFiles", func(t *testing.T) {
@@ -410,7 +425,8 @@ func TestMain(t *testing.T) {
 			vendor := "f5"
 			packageName := "nginx-ingress"
 			repoRoot := filepath.Join("testdata", "loadExistingCharts")
-			chartWrappers, err := loadExistingCharts(repoRoot, vendor, packageName)
+			paths := getPaths(t, repoRoot)
+			chartWrappers, err := loadExistingCharts(paths, vendor, packageName)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}
@@ -453,11 +469,11 @@ func TestMain(t *testing.T) {
 					},
 				},
 			}
-			repoRoot := t.TempDir()
-			if err := writeCharts(repoRoot, vendor, chartName, newCharts); err != nil {
+			paths := getPaths(t, t.TempDir())
+			if err := writeCharts(paths, vendor, chartName, newCharts); err != nil {
 				t.Fatalf("unexpected error in writeCharts: %s", err)
 			}
-			chartsFromDisk, err := loadExistingCharts(repoRoot, vendor, chartName)
+			chartsFromDisk, err := loadExistingCharts(paths, vendor, chartName)
 			if err != nil {
 				t.Fatalf("unexpected error in loadExistingCharts: %s", err)
 			}
@@ -499,14 +515,14 @@ func TestMain(t *testing.T) {
 					},
 				},
 			}
-			repoRoot := t.TempDir()
-			if err := writeCharts(repoRoot, vendor, chartName, newCharts); err != nil {
+			paths := getPaths(t, t.TempDir())
+			if err := writeCharts(paths, vendor, chartName, newCharts); err != nil {
 				t.Fatalf("unexpected error in first writeCharts call: %s", err)
 			}
-			if err := writeCharts(repoRoot, vendor, chartName, newCharts[0:2]); err != nil {
+			if err := writeCharts(paths, vendor, chartName, newCharts[0:2]); err != nil {
 				t.Fatalf("unexpected error in second writeCharts call: %s", err)
 			}
-			chartsFromDisk, err := loadExistingCharts(repoRoot, vendor, chartName)
+			chartsFromDisk, err := loadExistingCharts(paths, vendor, chartName)
 			if err != nil {
 				t.Fatalf("unexpected error in loadExistingCharts: %s", err)
 			}
@@ -541,11 +557,11 @@ func TestMain(t *testing.T) {
 					},
 				},
 			}
-			repoRoot := t.TempDir()
-			if err := writeCharts(repoRoot, vendor, chartName, newCharts); err != nil {
+			paths := getPaths(t, t.TempDir())
+			if err := writeCharts(paths, vendor, chartName, newCharts); err != nil {
 				t.Fatalf("unexpected error in first call of writeCharts: %s", err)
 			}
-			chartsFromDisk, err := loadExistingCharts(repoRoot, vendor, chartName)
+			chartsFromDisk, err := loadExistingCharts(paths, vendor, chartName)
 			if err != nil {
 				t.Fatalf("unexpected error in first call of loadExistingCharts: %s", err)
 			}
@@ -558,10 +574,10 @@ func TestMain(t *testing.T) {
 			}
 			chartsFromDisk[0].Modified = true
 
-			if err := writeCharts(repoRoot, vendor, chartName, chartsFromDisk); err != nil {
+			if err := writeCharts(paths, vendor, chartName, chartsFromDisk); err != nil {
 				t.Fatalf("unexpected error in second call of writeCharts: %s", err)
 			}
-			newChartsFromDisk, err := loadExistingCharts(repoRoot, vendor, chartName)
+			newChartsFromDisk, err := loadExistingCharts(paths, vendor, chartName)
 			if err != nil {
 				t.Fatalf("unexpected error in second call of loadExistingCharts: %s", err)
 			}

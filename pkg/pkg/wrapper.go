@@ -11,7 +11,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/rancher/partner-charts-ci/pkg/conform"
 	"github.com/rancher/partner-charts-ci/pkg/fetcher"
-	"github.com/rancher/partner-charts-ci/pkg/paths"
+	p "github.com/rancher/partner-charts-ci/pkg/paths"
 	"github.com/rancher/partner-charts-ci/pkg/upstreamyaml"
 	"github.com/sirupsen/logrus"
 
@@ -45,27 +45,6 @@ type PackageWrapper struct {
 	Vendor string
 }
 
-type PackageList []PackageWrapper
-
-func (p PackageList) Len() int {
-	return len(p)
-}
-
-func (p PackageList) Swap(i, j int) {
-	p[i], p[j] = p[j], p[i]
-}
-
-func (p PackageList) Less(i, j int) bool {
-	if p[i].SourceMetadata != nil && p[j].SourceMetadata != nil {
-		if p[i].Vendor != p[j].Vendor {
-			return p[i].Vendor < p[j].Vendor
-		}
-		return p[i].Name < p[j].Name
-	}
-
-	return false
-}
-
 func (packageWrapper *PackageWrapper) FullName() string {
 	return packageWrapper.Vendor + "/" + packageWrapper.Name
 }
@@ -73,7 +52,7 @@ func (packageWrapper *PackageWrapper) FullName() string {
 // Populates PackageWrapper with relevant data from upstream and
 // checks for updates. Returns true if newer package version is
 // available.
-func (packageWrapper *PackageWrapper) Populate() (bool, error) {
+func (packageWrapper *PackageWrapper) Populate(paths p.Paths) (bool, error) {
 	sourceMetadata, err := fetcher.FetchUpstream(*packageWrapper.UpstreamYaml)
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch data from upstream: %w", err)
@@ -84,6 +63,7 @@ func (packageWrapper *PackageWrapper) Populate() (bool, error) {
 	packageWrapper.SourceMetadata = &sourceMetadata
 
 	packageWrapper.FetchVersions, err = filterVersions(
+		paths,
 		packageWrapper.SourceMetadata.Versions,
 		packageWrapper.UpstreamYaml.Fetch,
 	)
@@ -136,12 +116,12 @@ func (pw PackageWrapper) GetOverlayFiles() (map[string][]byte, error) {
 // it must be in <vendor>/<name> format (i.e. the "full" package name).
 // If currentPackage is specified, the function returns a slice with only
 // one element, which is the specified package.
-func ListPackageWrappers(currentPackage string) (PackageList, error) {
+func ListPackageWrappers(paths p.Paths, currentPackage string) ([]PackageWrapper, error) {
 	var globPattern string
 	if currentPackage == "" {
-		globPattern = "packages/*/*"
+		globPattern = paths.Packages + "/*/*"
 	} else {
-		globPattern = filepath.Join("packages", currentPackage)
+		globPattern = filepath.Join(paths.Packages, currentPackage)
 	}
 	matches, err := filepath.Glob(globPattern)
 	if err != nil {
@@ -155,7 +135,7 @@ func ListPackageWrappers(currentPackage string) (PackageList, error) {
 		}
 	}
 
-	packageList := make(PackageList, 0, len(matches))
+	packageList := make([]PackageWrapper, 0, len(matches))
 	for _, match := range matches {
 		parts := strings.Split(match, "/")
 		if len(parts) != 3 {
@@ -192,14 +172,14 @@ func ListPackageWrappers(currentPackage string) (PackageList, error) {
 	return packageList, nil
 }
 
-func filterVersions(upstreamVersions repo.ChartVersions, fetch string) (repo.ChartVersions, error) {
+func filterVersions(paths p.Paths, upstreamVersions repo.ChartVersions, fetch string) (repo.ChartVersions, error) {
 	logrus.Debugf("Filtering versions for %s\n", upstreamVersions[0].Name)
 	upstreamVersions = stripPreRelease(upstreamVersions)
 	if len(upstreamVersions) == 0 {
 		err := fmt.Errorf("No versions available in upstream or all versions are marked pre-release")
 		return repo.ChartVersions{}, err
 	}
-	allStoredVersions, err := getStoredVersions(upstreamVersions[0].Name)
+	allStoredVersions, err := getStoredVersions(paths, upstreamVersions[0].Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get stored versions: %w", err)
 	}
@@ -283,10 +263,9 @@ func collectNonStoredVersions(versions repo.ChartVersions, storedVersions repo.C
 	return nonStoredVersions
 }
 
-func getStoredVersions(chartName string) (repo.ChartVersions, error) {
+func getStoredVersions(paths p.Paths, chartName string) (repo.ChartVersions, error) {
 	storedVersions := repo.ChartVersions{}
-	indexFilePath := filepath.Join(paths.GetRepoRoot(), "index.yaml")
-	helmIndexYaml, err := repo.LoadIndexFile(indexFilePath)
+	helmIndexYaml, err := repo.LoadIndexFile(paths.IndexYaml)
 	if err != nil {
 		return storedVersions, fmt.Errorf("failed to load index file: %w", err)
 	}

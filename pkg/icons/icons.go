@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	p "github.com/rancher/partner-charts-ci/pkg/paths"
 	"github.com/sirupsen/logrus"
 )
 
@@ -30,7 +31,7 @@ func GetDownloadedIconPath(packageName string) (string, error) {
 // EnsureIconDownloaded downloads the icon at iconUrl to the icon file path
 // for package packageName. If a file already exists at this path, the
 // download is skipped. Returns the path to the icon.
-func EnsureIconDownloaded(iconUrl, packageName string) (string, error) {
+func EnsureIconDownloaded(paths p.Paths, iconUrl, packageName string) (string, error) {
 	if localIconPath, err := GetDownloadedIconPath(packageName); err == nil {
 		return localIconPath, nil
 	}
@@ -57,7 +58,7 @@ func EnsureIconDownloaded(iconUrl, packageName string) (string, error) {
 		}
 	}
 
-	localIconPath := filepath.Join("assets", "icons", packageName+ext)
+	localIconPath := filepath.Join(paths.Icons, packageName+ext)
 	if err := os.WriteFile(localIconPath, contents, 0o644); err != nil {
 		return "", fmt.Errorf("failed to write response to file: %w", err)
 	}

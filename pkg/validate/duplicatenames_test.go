@@ -9,7 +9,7 @@ import (
 
 func TestPreventDuplicatePackageNames(t *testing.T) {
 	t.Run("should return no errors when no duplicates are present", func(t *testing.T) {
-		packageWrappers := pkg.PackageList{
+		packageWrappers := []pkg.PackageWrapper{
 			{
 				Name:   "package1",
 				Vendor: "vendor1",
@@ -24,7 +24,7 @@ func TestPreventDuplicatePackageNames(t *testing.T) {
 	})
 
 	t.Run("should return correct number of errors when duplicates are present", func(t *testing.T) {
-		packageWrappers := pkg.PackageList{
+		packageWrappers := []pkg.PackageWrapper{
 			{
 				Name:   "package1",
 				Vendor: "vendor1",

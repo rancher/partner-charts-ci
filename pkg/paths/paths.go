@@ -2,28 +2,49 @@ package paths
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/sirupsen/logrus"
 )
 
-// GetRepoRoot fetches absolute repository root path. If the
-// working directory is not the root of a git repo, exits the
-// program with an error.
-func GetRepoRoot() string {
-	repoRoot, err := os.Getwd()
-	if err != nil {
-		logrus.Fatalf("failed to get working directory: %s", err)
-	}
+var paths *Paths
 
-	gitDirPath := filepath.Join(repoRoot, ".git")
-	if fileInfo, err := os.Stat(gitDirPath); err == nil && fileInfo.IsDir() {
-		return repoRoot
-	} else if errors.Is(err, os.ErrNotExist) || !fileInfo.IsDir() {
-		logrus.Fatalf("must be at the root of a git repo")
-	}
+// Paths is a type that contains all of the paths that are relevant
+// to this tool. This approach facilitates unit testing.
+type Paths struct {
+	Assets            string
+	Charts            string
+	ConfigurationYaml string
+	Icons             string
+	IndexYaml         string
+	Packages          string
+	RepoRoot          string
+}
 
-	logrus.Fatalf("failed to check whether working directory is root of git repo: %s", err)
-	return ""
+func GetPaths() (Paths, error) {
+	if paths == nil {
+		// Check that we are at the root of a git repo
+		repoRoot, err := os.Getwd()
+		if err != nil {
+			return Paths{}, fmt.Errorf("failed to get working directory: %w", err)
+		}
+		gitDirPath := filepath.Join(repoRoot, ".git")
+		if fileInfo, err := os.Stat(gitDirPath); errors.Is(err, os.ErrNotExist) || !fileInfo.IsDir() {
+			return Paths{}, errors.New("must be at the root of a git repo")
+		} else if err != nil {
+			return Paths{}, fmt.Errorf("failed to stat .git/: %w", err)
+		}
+
+		assets := "assets"
+		paths = &Paths{
+			Assets:            assets,
+			Charts:            "charts",
+			ConfigurationYaml: "configuration.yaml",
+			Icons:             filepath.Join(assets, "icons"),
+			IndexYaml:         "index.yaml",
+			Packages:          "packages",
+			RepoRoot:          repoRoot,
+		}
+	}
+	return *paths, nil
 }
