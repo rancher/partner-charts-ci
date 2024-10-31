@@ -1098,8 +1098,8 @@ func main() {
 			Action: listPackages,
 		},
 		{
-			Name:   "auto",
-			Usage:  "Generate and commit changes",
+			Name:   "update",
+			Usage:  "Download and integrate new chart versions from upstreams",
 			Action: autoUpdate,
 			Flags: []cli.Flag{
 				cli.BoolFlag{
