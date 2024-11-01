@@ -66,6 +66,11 @@ func fetchUpstreamHelmrepo(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceM
 	if err != nil {
 		return chartSourceMeta, fmt.Errorf("request to %s failed: %w", url, err)
 	}
+	if resp.StatusCode > 200 && resp.StatusCode < 300 {
+		// if 2xx response, it should be 200, but we want to know if it isn't so
+		// we can handle it
+		logrus.Warnf("request to %s returned response %q", url, resp.Status)
+	}
 	if resp.StatusCode >= 300 {
 		return chartSourceMeta, fmt.Errorf("request to %s returned response %q", url, resp.Status)
 	}
