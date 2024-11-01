@@ -64,17 +64,25 @@ func fetchUpstreamHelmrepo(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceM
 
 	resp, err := http.Get(url)
 	if err != nil {
-		return chartSourceMeta, err
+		return chartSourceMeta, fmt.Errorf("request to %s failed: %w", url, err)
+	}
+	if resp.StatusCode > 200 && resp.StatusCode < 300 {
+		// if 2xx response, it should be 200, but we want to know if it isn't so
+		// we can handle it
+		logrus.Warnf("request to %s returned response %q", url, resp.Status)
+	}
+	if resp.StatusCode >= 300 {
+		return chartSourceMeta, fmt.Errorf("request to %s returned response %q", url, resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return chartSourceMeta, err
+		return chartSourceMeta, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	err = yaml.Unmarshal([]byte(body), indexYaml)
 	if err != nil {
-		return chartSourceMeta, err
+		return chartSourceMeta, fmt.Errorf("failed to unmarshal response body: %w", err)
 	}
 	if _, ok := indexYaml.Entries[upstreamYaml.HelmChart]; !ok {
 		return chartSourceMeta, fmt.Errorf("Helm chart: %s/%s not found", upstreamYaml.HelmRepo, upstreamYaml.HelmChart)
@@ -99,21 +107,23 @@ func fetchUpstreamHelmrepo(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceM
 func fetchUpstreamArtifacthub(upstreamYaml upstreamyaml.UpstreamYaml) (ChartSourceMetadata, error) {
 	url := fmt.Sprintf("%s/%s/%s", artifactHubApi, upstreamYaml.ArtifactHubRepo, upstreamYaml.ArtifactHubPackage)
 
-	apiResp := ArtifactHubApiHelm{}
-
 	resp, err := http.Get(url)
 	if err != nil {
-		return ChartSourceMetadata{}, err
+		return ChartSourceMetadata{}, fmt.Errorf("request to %s failed: %w", url, err)
+	}
+	if resp.StatusCode >= 300 {
+		return ChartSourceMetadata{}, fmt.Errorf("request to %s returned response %q", url, resp.Status)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return ChartSourceMetadata{}, err
+		return ChartSourceMetadata{}, fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	apiResp := ArtifactHubApiHelm{}
 	err = json.Unmarshal([]byte(body), &apiResp)
 	if err != nil {
-		return ChartSourceMetadata{}, err
+		return ChartSourceMetadata{}, fmt.Errorf("failed to unmarshal response body: %w", err)
 	}
 
 	if apiResp.ContentUrl == "" {
