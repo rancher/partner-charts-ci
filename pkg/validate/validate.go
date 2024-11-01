@@ -14,6 +14,7 @@ func Run(paths p.Paths, configYaml ConfigurationYaml) []error {
 	validationFuncs := []ValidationFunc{
 		preventReleasedChartModifications,
 		preventDuplicatePackageNames,
+		validatePackagesDirectory,
 	}
 	for _, validationFunc := range validationFuncs {
 		errors := validationFunc(paths, configYaml)
