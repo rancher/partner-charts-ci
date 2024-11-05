@@ -18,6 +18,7 @@ import (
 	p "github.com/rancher/partner-charts-ci/pkg/paths"
 	"github.com/rancher/partner-charts-ci/pkg/pkg"
 	"github.com/rancher/partner-charts-ci/pkg/upstreamyaml"
+	"github.com/rancher/partner-charts-ci/pkg/utils"
 	"github.com/rancher/partner-charts-ci/pkg/validate"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -259,7 +260,10 @@ func writeCharts(paths p.Paths, vendor, chartName string, chartWrappers []*Chart
 	for _, chartWrapper := range chartWrappers {
 		assetsFilename := getTgzFilename(chartWrapper.Chart)
 		assetsPath := filepath.Join(assetsDir, assetsFilename)
-		tgzFileExists := icons.Exists(assetsPath)
+		tgzFileExists, err := utils.Exists(assetsPath)
+		if err != nil {
+			return fmt.Errorf("failed to check %s for existence: %w", assetsPath, err)
+		}
 		if chartWrapper.Modified || !tgzFileExists {
 			_, err := chartutil.Save(chartWrapper.Chart, assetsDir)
 			if err != nil {
@@ -268,7 +272,10 @@ func writeCharts(paths p.Paths, vendor, chartName string, chartWrappers []*Chart
 		}
 
 		chartsPath := filepath.Join(chartsDir, chartWrapper.Metadata.Version)
-		chartsPathExists := icons.Exists(chartsPath)
+		chartsPathExists, err := utils.Exists(chartsPath)
+		if err != nil {
+			return fmt.Errorf("failed to check %s for existence: %w", chartsPath, err)
+		}
 		if chartWrapper.Modified || !chartsPathExists {
 			if err := conform.Gunzip(assetsPath, chartsPath); err != nil {
 				return fmt.Errorf("failed to unpack %q version %q to %q: %w", chartWrapper.Name(), chartWrapper.Metadata.Version, chartsPath, err)
@@ -572,7 +579,7 @@ func writeIndex(paths p.Paths) error {
 			// the index.yaml. This works because Rancher uses the icon URL
 			// value from index.yaml, not the chart itself, when loading a chart's
 			// icon.
-			iconPath, err := icons.GetDownloadedIconPath(newChartVersion.Name)
+			iconPath, err := icons.GetDownloadedIconPath(paths, newChartVersion.Name)
 			if err != nil {
 				return fmt.Errorf("failed to get downloaded icon path for chart %q version %s: %s", newChartVersion.Name, newChartVersion.Version, err)
 			} else {
@@ -974,7 +981,7 @@ func removePackage(c *cli.Context) error {
 	}
 	removalPaths = append(removalPaths, assetFiles...)
 
-	localIconPath, err := icons.GetDownloadedIconPath(packageWrapper.Name)
+	localIconPath, err := icons.GetDownloadedIconPath(paths, packageWrapper.Name)
 	if err != nil {
 		logrus.Warnf("failed to get icon path for %s: %s", packageWrapper.FullName(), err)
 	} else {

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	p "github.com/rancher/partner-charts-ci/pkg/paths"
-	"github.com/sirupsen/logrus"
+	"github.com/rancher/partner-charts-ci/pkg/utils"
 )
 
 // possible extensions for the icons
@@ -17,10 +17,12 @@ var validExtensions []string = []string{".png", ".jpg", ".jpeg", ".svg", ".ico"}
 // GetDownloadedIconPath checks if the package with name packageName has
 // an icon downloaded. If so, it returns the path. Otherwise it returns
 // an error.
-func GetDownloadedIconPath(packageName string) (string, error) {
+func GetDownloadedIconPath(paths p.Paths, packageName string) (string, error) {
 	for _, ext := range validExtensions {
-		filePath := fmt.Sprintf("assets/icons/%s%s", packageName, ext)
-		if exist := Exists(filePath); exist {
+		filePath := filepath.Join(paths.Icons, packageName+ext)
+		if exists, err := utils.Exists(filePath); err != nil {
+			return "", fmt.Errorf("failed to check %s for existence: %w", filePath, err)
+		} else if exists {
 			return filePath, nil
 		}
 	}
@@ -32,7 +34,7 @@ func GetDownloadedIconPath(packageName string) (string, error) {
 // for package packageName. If a file already exists at this path, the
 // download is skipped. Returns the path to the icon.
 func EnsureIconDownloaded(paths p.Paths, iconUrl, packageName string) (string, error) {
-	if localIconPath, err := GetDownloadedIconPath(packageName); err == nil {
+	if localIconPath, err := GetDownloadedIconPath(paths, packageName); err == nil {
 		return localIconPath, nil
 	}
 
@@ -64,19 +66,6 @@ func EnsureIconDownloaded(paths p.Paths, iconUrl, packageName string) (string, e
 	}
 
 	return localIconPath, nil
-}
-
-// Exists checks if the file already exists
-func Exists(filePath string) bool {
-	_, err := os.Stat(filePath)
-	if os.IsNotExist(err) {
-		return false // File do not exist
-	} else if err == nil {
-		return true // File exists
-	}
-
-	logrus.Errorf("Error checking file: %s - error: %v", filePath, err)
-	return false // File might not exist
 }
 
 func getExtension(data []byte) (string, error) {
