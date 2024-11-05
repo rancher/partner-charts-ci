@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	p "github.com/rancher/partner-charts-ci/pkg/paths"
-	"github.com/sirupsen/logrus"
+	"github.com/rancher/partner-charts-ci/pkg/utils"
 )
 
 // possible extensions for the icons
@@ -20,7 +20,9 @@ var validExtensions []string = []string{".png", ".jpg", ".jpeg", ".svg", ".ico"}
 func GetDownloadedIconPath(packageName string) (string, error) {
 	for _, ext := range validExtensions {
 		filePath := fmt.Sprintf("assets/icons/%s%s", packageName, ext)
-		if exist := Exists(filePath); exist {
+		if exists, err := utils.Exists(filePath); err != nil {
+			return "", fmt.Errorf("failed to check %s for existence: %w", filePath, err)
+		} else if exists {
 			return filePath, nil
 		}
 	}
@@ -64,19 +66,6 @@ func EnsureIconDownloaded(paths p.Paths, iconUrl, packageName string) (string, e
 	}
 
 	return localIconPath, nil
-}
-
-// Exists checks if the file already exists
-func Exists(filePath string) bool {
-	_, err := os.Stat(filePath)
-	if os.IsNotExist(err) {
-		return false // File do not exist
-	} else if err == nil {
-		return true // File exists
-	}
-
-	logrus.Errorf("Error checking file: %s - error: %v", filePath, err)
-	return false // File might not exist
 }
 
 func getExtension(data []byte) (string, error) {
