@@ -805,11 +805,14 @@ func autoUpdate(c *cli.Context) {
 		return
 	}
 
-	skippedList := make([]string, 0)
+	updatedPackageWrappers := make([]pkg.PackageWrapper, 0, len(updatablePackageWrappers))
+	skippedList := make([]string, 0, len(updatablePackageWrappers))
 	for _, packageWrapper := range updatablePackageWrappers {
 		if err := ApplyUpdates(paths, packageWrapper); err != nil {
 			logrus.Errorf("failed to apply updates for chart %q: %s", packageWrapper.Name, err)
 			skippedList = append(skippedList, packageWrapper.Name)
+		} else {
+			updatedPackageWrappers = append(updatedPackageWrappers, packageWrapper)
 		}
 	}
 	if len(skippedList) >= len(updatablePackageWrappers) {
@@ -824,8 +827,8 @@ func autoUpdate(c *cli.Context) {
 	}
 
 	if makeCommit {
-		if err := commitChanges(paths, updatablePackageWrappers); err != nil {
-			logrus.Fatal(err)
+		if err := commitChanges(paths, updatedPackageWrappers); err != nil {
+			logrus.Fatalf("failed to commit changes: %s", err)
 		}
 	}
 }
