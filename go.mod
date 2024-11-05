@@ -5,7 +5,7 @@ go 1.23
 require (
 	github.com/Masterminds/semver/v3 v3.3.0
 	github.com/go-git/go-git/v5 v5.12.0
-	github.com/google/go-github/v53 v53.2.0
+	github.com/google/go-github/v66 v66.0.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli v1.22.14

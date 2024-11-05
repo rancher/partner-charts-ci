@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/google/go-github/v53/github"
+	"github.com/google/go-github/v66/github"
 	"github.com/rancher/partner-charts-ci/pkg/upstreamyaml"
 	"github.com/sirupsen/logrus"
 
