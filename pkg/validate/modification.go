@@ -2,11 +2,12 @@ package validate
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
@@ -51,25 +52,14 @@ func preventReleasedChartModifications(paths p.Paths, configYaml ConfigurationYa
 		logrus.Fatal(err)
 	}
 
-	directoryComparison := DirectoryComparison{}
-	for _, dirPath := range []string{"assets"} {
-		upstreamPath := path.Join(cloneDir, dirPath)
-		// TODO: leaving this (almost) as-is because this was changed in #35.
-		// Use paths.Assets instead of paths.RepoRoot once that PR is merged.
-		updatePath := path.Join(paths.RepoRoot, dirPath)
-		if _, err := os.Stat(updatePath); os.IsNotExist(err) {
-			logrus.Infof("Directory '%s' not in source. Skipping...", dirPath)
-			continue
-		}
-		if _, err := os.Stat(upstreamPath); os.IsNotExist(err) {
-			logrus.Infof("Directory '%s' not in upstream. Skipping...", dirPath)
-			continue
-		}
-		newComparison, err := compareDirectories(upstreamPath, updatePath)
-		if err != nil {
-			logrus.Error(err)
-		}
-		directoryComparison.Merge(newComparison)
+	upstreamPath := filepath.Join(cloneDir, "assets")
+	updatePath, err := filepath.Abs(paths.Assets)
+	if err != nil {
+		return []error{fmt.Errorf("failed to get absolute path to assets dir: %w", err)}
+	}
+	directoryComparison, err := compareDirectories(upstreamPath, updatePath, []string{"icons"})
+	if err != nil {
+		return []error{fmt.Errorf("failed to compare directories: %w", err)}
 	}
 
 	errors := make([]error, 0, len(directoryComparison.Modified))
@@ -113,31 +103,30 @@ func checksumFile(filePath string) (string, error) {
 	return hash, nil
 }
 
-func compareDirectories(upstreamPath, updatePath string) (DirectoryComparison, error) {
+func compareDirectories(upstreamPath, updatePath string, skipDirs []string) (DirectoryComparison, error) {
 	logrus.Debugf("Comparing directories %s and %s", upstreamPath, updatePath)
 	directoryComparison := DirectoryComparison{}
 	checkedSet := make(map[string]struct{})
 	var checked = struct{}{}
 
-	if _, err := os.Stat(upstreamPath); os.IsNotExist(err) {
-		return directoryComparison, err
-	}
-	if _, err := os.Stat(updatePath); os.IsNotExist(err) {
-		return directoryComparison, err
-	}
-
 	findRemovalAndModification := func(upstreamFilePath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		relativePath := strings.TrimPrefix(upstreamFilePath, upstreamPath)
+		relativePath, err := filepath.Rel(upstreamPath, upstreamFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path of %s: %w", upstreamFilePath, err)
+		}
 		checkedSet[relativePath] = checked
 
 		if info.IsDir() {
+			if slices.Contains(skipDirs, relativePath) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
-		updateFilePath := path.Join(updatePath, relativePath)
+		updateFilePath := filepath.Join(updatePath, relativePath)
 		if _, err := os.Stat(updateFilePath); os.IsNotExist(err) {
 			directoryComparison.Removed = append(directoryComparison.Removed, updateFilePath)
 			return nil
@@ -174,19 +163,29 @@ func compareDirectories(upstreamPath, updatePath string) (DirectoryComparison, e
 		if err != nil {
 			return err
 		}
-		relativePath := strings.TrimPrefix(updateFilePath, updatePath)
+		relativePath, err := filepath.Rel(updatePath, updateFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to get relative path of %s: %w", updateFilePath, err)
+		}
 
-		if _, ok := checkedSet[relativePath]; !ok && !info.IsDir() {
+		if info.IsDir() {
+			if slices.Contains(skipDirs, relativePath) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if _, ok := checkedSet[relativePath]; !ok {
 			directoryComparison.Added = append(directoryComparison.Added, updateFilePath)
 		}
 
 		return nil
 	}
 
-	if err := filepath.Walk(upstreamPath, findRemovalAndModification); err != nil {
+	if err := filepath.Walk(upstreamPath, findRemovalAndModification); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return DirectoryComparison{}, fmt.Errorf("failed to search %q for removed or modified files: %w", upstreamPath, err)
 	}
-	if err := filepath.Walk(updatePath, findAddition); err != nil {
+	if err := filepath.Walk(updatePath, findAddition); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return DirectoryComparison{}, fmt.Errorf("failed to search %q for added files: %w", updatePath, err)
 	}
 
@@ -245,7 +244,7 @@ func matchHelmCharts(upstreamPath, updatePath string) (bool, error) {
 	}
 	defer os.RemoveAll(updateChartDirectory)
 
-	directoryComparison, err := compareDirectories(upstreamChartDirectory, updateChartDirectory)
+	directoryComparison, err := compareDirectories(upstreamChartDirectory, updateChartDirectory, []string{})
 	if err != nil {
 		return false, fmt.Errorf("failed to compare directories: %w", err)
 	}

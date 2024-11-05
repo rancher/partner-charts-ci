@@ -10,8 +10,6 @@ import (
 	"helm.sh/helm/v3/pkg/repo"
 )
 
-// TODO: this function was copied from icons_test.go, which is added in another
-// PR. This can be deleted once the two branches are merged into main.
 func generateIndex(t *testing.T) *repo.IndexFile {
 	t.Helper()
 	return &repo.IndexFile{
