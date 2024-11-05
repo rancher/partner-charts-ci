@@ -782,7 +782,7 @@ func autoUpdate(c *cli.Context) {
 			continue
 		}
 
-		updated, err := packageWrapper.Populate(paths)
+		updatable, err := packageWrapper.Populate(paths)
 		if err != nil {
 			logrus.Errorf("failed to populate %s: %s", packageWrapper.FullName(), err)
 			continue
@@ -796,7 +796,7 @@ func autoUpdate(c *cli.Context) {
 				packageWrapper.FullName(), packageWrapper.SourceMetadata.Source, version.Version, version.URLs[0])
 		}
 
-		if updated {
+		if updatable {
 			updatablePackageWrappers = append(updatablePackageWrappers, packageWrapper)
 		}
 	}
