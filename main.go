@@ -579,7 +579,7 @@ func writeIndex(paths p.Paths) error {
 			// the index.yaml. This works because Rancher uses the icon URL
 			// value from index.yaml, not the chart itself, when loading a chart's
 			// icon.
-			iconPath, err := icons.GetDownloadedIconPath(newChartVersion.Name)
+			iconPath, err := icons.GetDownloadedIconPath(paths, newChartVersion.Name)
 			if err != nil {
 				// TODO: return an error here instead of simply logging it.
 				// Logged errors can be ignored; errors that prevent the user
@@ -984,7 +984,7 @@ func removePackage(c *cli.Context) error {
 	}
 	removalPaths = append(removalPaths, assetFiles...)
 
-	localIconPath, err := icons.GetDownloadedIconPath(packageWrapper.Name)
+	localIconPath, err := icons.GetDownloadedIconPath(paths, packageWrapper.Name)
 	if err != nil {
 		logrus.Warnf("failed to get icon path for %s: %s", packageWrapper.FullName(), err)
 	} else {

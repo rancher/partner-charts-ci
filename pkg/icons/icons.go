@@ -17,9 +17,9 @@ var validExtensions []string = []string{".png", ".jpg", ".jpeg", ".svg", ".ico"}
 // GetDownloadedIconPath checks if the package with name packageName has
 // an icon downloaded. If so, it returns the path. Otherwise it returns
 // an error.
-func GetDownloadedIconPath(packageName string) (string, error) {
+func GetDownloadedIconPath(paths p.Paths, packageName string) (string, error) {
 	for _, ext := range validExtensions {
-		filePath := fmt.Sprintf("assets/icons/%s%s", packageName, ext)
+		filePath := filepath.Join(paths.Icons, packageName+ext)
 		if exists, err := utils.Exists(filePath); err != nil {
 			return "", fmt.Errorf("failed to check %s for existence: %w", filePath, err)
 		} else if exists {
@@ -34,7 +34,7 @@ func GetDownloadedIconPath(packageName string) (string, error) {
 // for package packageName. If a file already exists at this path, the
 // download is skipped. Returns the path to the icon.
 func EnsureIconDownloaded(paths p.Paths, iconUrl, packageName string) (string, error) {
-	if localIconPath, err := GetDownloadedIconPath(packageName); err == nil {
+	if localIconPath, err := GetDownloadedIconPath(paths, packageName); err == nil {
 		return localIconPath, nil
 	}
 
