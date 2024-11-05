@@ -775,7 +775,7 @@ func autoUpdate(c *cli.Context) {
 		logrus.Fatalf("failed to list packages: %s", err)
 	}
 
-	packageList := make([]pkg.PackageWrapper, 0, len(packageWrappers))
+	updatablePackageWrappers := make([]pkg.PackageWrapper, 0, len(packageWrappers))
 	for _, packageWrapper := range packageWrappers {
 		if packageWrapper.UpstreamYaml.Deprecated {
 			logrus.Warnf("Package %s is deprecated; skipping update", packageWrapper.FullName())
@@ -797,22 +797,22 @@ func autoUpdate(c *cli.Context) {
 		}
 
 		if updated {
-			packageList = append(packageList, packageWrapper)
+			updatablePackageWrappers = append(updatablePackageWrappers, packageWrapper)
 		}
 	}
 
-	if len(packageList) == 0 {
+	if len(updatablePackageWrappers) == 0 {
 		return
 	}
 
 	skippedList := make([]string, 0)
-	for _, packageWrapper := range packageList {
+	for _, packageWrapper := range updatablePackageWrappers {
 		if err := ApplyUpdates(paths, packageWrapper); err != nil {
 			logrus.Errorf("failed to apply updates for chart %q: %s", packageWrapper.Name, err)
 			skippedList = append(skippedList, packageWrapper.Name)
 		}
 	}
-	if len(skippedList) >= len(packageList) {
+	if len(skippedList) >= len(updatablePackageWrappers) {
 		logrus.Fatal("All packages skipped. Exiting...")
 	}
 	if len(skippedList) > 0 {
@@ -824,7 +824,7 @@ func autoUpdate(c *cli.Context) {
 	}
 
 	if makeCommit {
-		if err := commitChanges(paths, packageList); err != nil {
+		if err := commitChanges(paths, updatablePackageWrappers); err != nil {
 			logrus.Fatal(err)
 		}
 	}
