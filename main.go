@@ -782,7 +782,6 @@ func autoUpdate(c *cli.Context) {
 			continue
 		}
 
-		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
 		updated, err := packageWrapper.Populate(paths)
 		if err != nil {
 			logrus.Errorf("failed to populate %s: %s", packageWrapper.FullName(), err)
@@ -793,7 +792,7 @@ func autoUpdate(c *cli.Context) {
 			logrus.Infof("%s is up-to-date\n", packageWrapper.FullName())
 		}
 		for _, version := range packageWrapper.FetchVersions {
-			logrus.Infof("\n  Package: %s\n  Source: %s\n  Version: %s\n  URL: %s  \n",
+			logrus.Infof("\n  Package: %s\n  Source: %s\n  Version: %s\n  URL: %s\n",
 				packageWrapper.FullName(), packageWrapper.SourceMetadata.Source, version.Version, version.URLs[0])
 		}
 
@@ -813,15 +812,15 @@ func autoUpdate(c *cli.Context) {
 			skippedList = append(skippedList, packageWrapper.Name)
 		}
 	}
+	if len(skippedList) >= len(packageList) {
+		logrus.Fatal("All packages skipped. Exiting...")
+	}
 	if len(skippedList) > 0 {
 		logrus.Errorf("Skipped due to error: %v", skippedList)
 	}
-	if len(skippedList) >= len(packageList) {
-		logrus.Fatalf("All packages skipped. Exiting...")
-	}
 
 	if err := writeIndex(paths); err != nil {
-		logrus.Error(err)
+		logrus.Fatalf("failed to write index.yaml: %s", err)
 	}
 
 	if makeCommit {
