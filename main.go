@@ -574,12 +574,7 @@ func writeIndex(paths p.Paths) error {
 			// icon.
 			iconPath, err := icons.GetDownloadedIconPath(newChartVersion.Name)
 			if err != nil {
-				// TODO: return an error here instead of simply logging it.
-				// Logged errors can be ignored; errors that prevent the user
-				// from completing their task get fixed. But the errors in
-				// rancher/partner-charts must be addressed before we can
-				// do this.
-				logrus.Errorf("failed to get downloaded icon path for chart %q version %q: %s", newChartVersion.Name, newChartVersion.Version, err)
+				return fmt.Errorf("failed to get downloaded icon path for chart %q version %s: %s", newChartVersion.Name, newChartVersion.Version, err)
 			} else {
 				newChartVersion.Icon = "file://" + iconPath
 			}
