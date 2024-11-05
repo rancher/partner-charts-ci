@@ -775,15 +775,14 @@ func autoUpdate(c *cli.Context) {
 		logrus.Fatalf("failed to list packages: %s", err)
 	}
 
-	packageList := make([]pkg.PackageWrapper, 0, len(packageWrappers))
+	updatablePackageWrappers := make([]pkg.PackageWrapper, 0, len(packageWrappers))
 	for _, packageWrapper := range packageWrappers {
 		if packageWrapper.UpstreamYaml.Deprecated {
 			logrus.Warnf("Package %s is deprecated; skipping update", packageWrapper.FullName())
 			continue
 		}
 
-		logrus.Debugf("Populating package from %s\n", packageWrapper.Path)
-		updated, err := packageWrapper.Populate(paths)
+		updatable, err := packageWrapper.Populate(paths)
 		if err != nil {
 			logrus.Errorf("failed to populate %s: %s", packageWrapper.FullName(), err)
 			continue
@@ -793,40 +792,43 @@ func autoUpdate(c *cli.Context) {
 			logrus.Infof("%s is up-to-date\n", packageWrapper.FullName())
 		}
 		for _, version := range packageWrapper.FetchVersions {
-			logrus.Infof("\n  Package: %s\n  Source: %s\n  Version: %s\n  URL: %s  \n",
+			logrus.Infof("\n  Package: %s\n  Source: %s\n  Version: %s\n  URL: %s\n",
 				packageWrapper.FullName(), packageWrapper.SourceMetadata.Source, version.Version, version.URLs[0])
 		}
 
-		if updated {
-			packageList = append(packageList, packageWrapper)
+		if updatable {
+			updatablePackageWrappers = append(updatablePackageWrappers, packageWrapper)
 		}
 	}
 
-	if len(packageList) == 0 {
+	if len(updatablePackageWrappers) == 0 {
 		return
 	}
 
-	skippedList := make([]string, 0)
-	for _, packageWrapper := range packageList {
+	updatedPackageWrappers := make([]pkg.PackageWrapper, 0, len(updatablePackageWrappers))
+	skippedList := make([]string, 0, len(updatablePackageWrappers))
+	for _, packageWrapper := range updatablePackageWrappers {
 		if err := ApplyUpdates(paths, packageWrapper); err != nil {
 			logrus.Errorf("failed to apply updates for chart %q: %s", packageWrapper.Name, err)
 			skippedList = append(skippedList, packageWrapper.Name)
+		} else {
+			updatedPackageWrappers = append(updatedPackageWrappers, packageWrapper)
 		}
+	}
+	if len(skippedList) >= len(updatablePackageWrappers) {
+		logrus.Fatal("All packages skipped. Exiting...")
 	}
 	if len(skippedList) > 0 {
 		logrus.Errorf("Skipped due to error: %v", skippedList)
 	}
-	if len(skippedList) >= len(packageList) {
-		logrus.Fatalf("All packages skipped. Exiting...")
-	}
 
 	if err := writeIndex(paths); err != nil {
-		logrus.Error(err)
+		logrus.Fatalf("failed to write index.yaml: %s", err)
 	}
 
 	if makeCommit {
-		if err := commitChanges(paths, packageList); err != nil {
-			logrus.Fatal(err)
+		if err := commitChanges(paths, updatedPackageWrappers); err != nil {
+			logrus.Fatalf("failed to commit changes: %s", err)
 		}
 	}
 }
