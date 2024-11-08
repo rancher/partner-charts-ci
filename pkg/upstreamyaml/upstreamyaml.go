@@ -33,11 +33,11 @@ type UpstreamYaml struct {
 	HelmRepo           string         `json:"HelmRepo,omitempty"`
 	Hidden             bool           `json:"Hidden,omitempty"`
 	Namespace          string         `json:"Namespace,omitempty"`
-	// PackageVersion is deprecated. It is deprecated because rancher/partner-charts
-	// updates are now automated, and this automation does not combine well with
-	// PackageVersion. Additionally, as of the time of writing, PackageVersion was
-	// never actually used. PackageVersion should not be added to any existing packages,
-	// nor should it be set in any new packages. For more information please see
+	// Deprecated: rancher/partner-charts updates are now automated, and this
+	// automation does not combine well with PackageVersion. Additionally,
+	// PackageVersion was never actually used. PackageVersion should not
+	// be added to any existing packages, nor should it be set in any new
+	// packages. For more information please see
 	// https://jira.suse.com/browse/SURE-9320.
 	PackageVersion int    `json:"PackageVersion,omitempty"`
 	ReleaseName    string `json:"ReleaseName,omitempty"`
