@@ -21,7 +21,7 @@ import (
 	"github.com/rancher/partner-charts-ci/pkg/utils"
 	"github.com/rancher/partner-charts-ci/pkg/validate"
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -618,7 +618,7 @@ func listPackages(c *cli.Context) error {
 
 // addFeaturedChart adds the "featured" annotation to a chart.
 func addFeaturedChart(c *cli.Context) error {
-	if len(c.Args()) != 2 {
+	if c.Args().Len() != 2 {
 		logrus.Fatalf("Please provide the chart name and featured number (1 - %d) as arguments\n", featuredMax)
 	}
 	featuredChart := c.Args().Get(0)
@@ -666,7 +666,7 @@ func addFeaturedChart(c *cli.Context) error {
 
 // removeFeaturedChart removes the "featured" annotation from a chart.
 func removeFeaturedChart(c *cli.Context) error {
-	if len(c.Args()) != 1 {
+	if c.Args().Len() != 1 {
 		logrus.Fatal("Please provide the chart name as argument")
 	}
 	featuredChart := c.Args().Get(0)
@@ -694,7 +694,7 @@ func removeFeaturedChart(c *cli.Context) error {
 	return nil
 }
 
-func listFeaturedCharts(c *cli.Context) {
+func listFeaturedCharts(c *cli.Context) error {
 	indexConflict := false
 	featuredSorted := make([]string, featuredMax)
 	paths, err := p.GetPaths()
@@ -726,12 +726,13 @@ func listFeaturedCharts(c *cli.Context) {
 		}
 	}
 
+	return nil
 }
 
 // hideChart ensures each released version of a package has the "hidden"
 // annotation set to "true". This hides the package in the Rancher UI.
 func hideChart(c *cli.Context) error {
-	if len(c.Args()) != 1 {
+	if c.Args().Len() != 1 {
 		logrus.Fatal("Must provide exactly one package name as argument")
 	}
 	currentPackage := c.Args().Get(0)
@@ -766,7 +767,7 @@ func hideChart(c *cli.Context) error {
 }
 
 // CLI function call - Generates automated commit
-func autoUpdate(c *cli.Context) {
+func autoUpdate(c *cli.Context) error {
 	currentPackage := os.Getenv(packageEnvVariable)
 	paths, err := p.GetPaths()
 	if err != nil {
@@ -804,7 +805,7 @@ func autoUpdate(c *cli.Context) {
 	}
 
 	if len(updatablePackageWrappers) == 0 {
-		return
+		return nil
 	}
 
 	updatedPackageWrappers := make([]pkg.PackageWrapper, 0, len(updatablePackageWrappers))
@@ -833,6 +834,8 @@ func autoUpdate(c *cli.Context) {
 			logrus.Fatalf("failed to commit changes: %s", err)
 		}
 	}
+
+	return nil
 }
 
 // CLI function call - Validates repo against released
@@ -955,7 +958,7 @@ func getOlderAndNewerChartVersions(paths p.Paths, days int) (map[string][]string
 }
 
 func removePackage(c *cli.Context) error {
-	if len(c.Args()) != 1 {
+	if c.Args().Len() != 1 {
 		return errors.New("must provide package name as argument")
 	}
 	currentPackage := c.Args().Get(0)
@@ -1006,7 +1009,7 @@ func removePackage(c *cli.Context) error {
 }
 
 func deprecatePackage(c *cli.Context) error {
-	if len(c.Args()) != 1 {
+	if c.Args().Len() != 1 {
 		return errors.New("must provide package name as argument")
 	}
 	currentPackage := c.Args().Get(0)
@@ -1060,7 +1063,7 @@ func main() {
 	app.Version = fmt.Sprintf("%s (%s)", version, commit)
 	app.Usage = "A tool for working with the Rancher Partner Charts helm chart repository"
 
-	app.Commands = []cli.Command{
+	app.Commands = []*cli.Command{
 		{
 			Name:   "list",
 			Usage:  "List packages",
@@ -1071,8 +1074,9 @@ func main() {
 			Usage:  "Download and integrate new chart versions from upstreams",
 			Action: autoUpdate,
 			Flags: []cli.Flag{
-				cli.BoolFlag{
-					Name:        "commit, c",
+				&cli.BoolFlag{
+					Name:        "commit",
+					Aliases:     []string{"c"},
 					Usage:       "Commit any changes",
 					Destination: &makeCommit,
 				},
@@ -1086,7 +1090,7 @@ func main() {
 		{
 			Name:  "feature",
 			Usage: "Commands related to the 'catalog.cattle.io/featured' annotation",
-			Subcommands: []cli.Command{
+			Subcommands: []*cli.Command{
 				{
 					Name:   "list",
 					Usage:  "List currently featured charts",
@@ -1121,8 +1125,9 @@ func main() {
 			Action:    removePackage,
 			ArgsUsage: "<package>",
 			Flags: []cli.Flag{
-				cli.BoolFlag{
-					Name:        "force, f",
+				&cli.BoolFlag{
+					Name:        "force",
+					Aliases:     []string{"f"},
 					Usage:       "Skip check for package deprecation",
 					Destination: &force,
 				},
