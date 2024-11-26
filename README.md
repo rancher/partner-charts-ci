@@ -75,7 +75,7 @@ often used for adding [`app-readme.md`](#app-readmemd) and
 ## Example Workflow for Adding a Package
 
 These steps assume that the working directory is set to the root of
-the repository you want to operate on. They use the fictional
+the repository you want to operate on. They use the example
 `suse/kubewarden-controller` package in commands.
 
 #### 1. Create a directory for your package of the form `packages/<vendor>/<chart>`
@@ -272,11 +272,12 @@ versions.
 
 ### Featured Charts
 
-In the `Apps > Charts` view, the Rancher UI may have a set of tiles at the top
-featuring several charts. These are the "featured" charts. Charts that are
+In the `Apps > Charts` view, the Rancher UI may have a set of tiles at the
+top featuring several charts. These are the "featured" charts. Charts that are
 featured have the `catalog.cattle.io/featured` annotation set on their latest
-chart version. You can see and control featured charts using the
-`partner-charts-ci feature` subcommands.
+chart version. This annotation is reserved for preferred partners that SUSE
+has agreed to highlight in the `Apps > Charts` marquee tiles. You can see and
+control featured charts using the `partner-charts-ci feature` subcommands.
 
 
 ### Deprecating and Removing Packages
