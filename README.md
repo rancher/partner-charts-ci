@@ -1,192 +1,154 @@
 # partner-charts-ci
 
-This tool is intended to aid in ingest, generation, and maintenance of the Rancher partner Helm chart repository. It permits fetching the latest published chart from a Helm Repo, Git Repo, or Artifact Hub, automatically setting necessary alterations, and updating the repo index and assets.
+`partner-charts-ci` is used to automate the process of working with the
+[Rancher Partner Charts Repository](https://github.com/rancher/partner-charts).
+More specifically, it uses configuration that specifies "upstream" helm charts to
+download those charts, modify them for Rancher, and construct/maintain a new
+helm chart repository. It also includes commands for things like validating the
+state of the repository and removing out-of-date versions of helm charts.
 
-## Building
-Binaries are provided for macOS (Universal) and Linux (x86_64).
 
-Ensure your host has Golang 1.18 or newer then simply build with
-```bash
-make build
-```
+## The Basics
 
-#### macOS Universal Build
-```bash
-make build-darwin-universal
-```
+### Terminology
 
-## CI Process
-The majority of the day-to-day CI operation is handled by the 'auto' subcommand which will run a full check against all configured charts, download any updates, and form a commit with the changes.
+A **package** is a set of configuration and files that specifies an upstream
+helm chart and modifications applied to it when integrating new versions of it
+into the repository. There is a single package for every chart in the repository.
 
-#### 1. Clone your fork of the [Rancher Partner Charts](github.com/rancher/partner-charts) repository
-```bash
-git clone -b main-source git@github.com:<your_github>/partner-charts.git
-````
-#### 2. Ensure that `git status` is reporting a clean working tree
-```bash
-➜  partner-charts git:(main-source) git status
-On branch main-source
-Your branch is up to date with 'origin/main-source'.
+A **chart** is a helm chart.
 
-nothing to commit, working tree clean
-```
-#### 3. Pull the latest CI build
-```bash
-scripts/pull-ci-scripts
-```
-#### 4. Run the auto function
-```bash
-bin/partner-charts-ci auto
-```
-#### 5. Run a validation
-```bash
-bin/partner-charts-ci validate
-```
-#### 6. Checkout the 'main' branch
-```bash
-git checkout main
-```
-#### 7. Remove the current `index.yaml` and `assets`
-```bash
-rm -r assets index.yaml
-```
-#### 8. Copy in the updated `index.yaml` and `assets`
-```bash
-git checkout main-source -- index.yaml assets
-```
-#### 9. Add, commit, and push your changes
-```bash
-git add index.yaml assets
-git commit -m "Release Partner Charts"
-git push origin main
-git push origin main-source
-```
-#### 10. Open a Pull-Request for both your `main-source` and `main` branches
-- The `main-source` PR message should auto-populate with the list of additions/updates
-- For the `main` PR you should include the PR number for the related `main-source` PR
+A **chart version** is a specific version of a chart. Each chart included in
+the repository has one or more chart versions.
 
-## Featuring or Hiding a chart
-Featuring and hiding charts is done by appending the `catalog.cattle.io/featured` or `catalog.cattle.io/hidden` chart annotation, respectively. 
-The CI tool is able to perform these changes for you, to easly update the asset gzip, the charts directory, and the index.yaml.
+**Upstream** refers to the place a chart comes from. It can take the form of a
+helm repository, an Artifact Hub repository or a git repository.
 
-If you open a PR after modifying an existing chart, the `validation` stage will expectedly fail, as the main goal is to ensure no accidental modification of already released charts.
 
-In order to avoid this, somewhere in the title of the PR, include the string `[modified charts]`. This will cause the PR check to skip that part of the validation. For example, when you open the PR you could title it "Hiding suse/kubewarden-controller chart [modified charts]".
+### Directory Structure
 
-To view the currently featured charts
-```bash
-bin/partner-charts-ci feature list
 ```
-To feature a chart
-```bash
-bin/partner-charts-ci feature add suse/kubewarden-controller 2
-```
-To remove the featured annotation
-```bash
-bin/partner-charts-ci feature remove suse/kubewarden-controller
-```
-To hide the chart
-```bash
-bin/partner-charts-ci hide suse/kubewarden-controller
-```
-
-After any of those changes, simply add, commit, push - and open a PR with "[modified charts]" in the title
-```bash
-git add index.yaml assets charts
-git commit -m "Hiding suse/kubewarden-controller"
-git push origin main-source
-
-# Open a Pull Request
+configuration.yaml                      configuration for partner-charts-ci
+index.yaml                              the index.yaml for the helm repository
+packages/                               contains package directories
+  suse/
+    kubewarden-controller/              referred to as a "package directory"
+      upstream.yaml                     configuration specific to a single package
+      overlay/
+        app-readme.md
+        questions.yaml
+    ...
+  ...
+charts/                                 unarchived chart versions
+  suse/
+    kubewarden-controller/
+      1.2.3/
+        ...
+      1.2.4/
+        ...
+      ...
+    ...
+  ...
+assets/                                 archived chart versions
+  suse/
+    kubewarden-controller-1.2.3.tgz
+    kubewarden-controller-1.2.4.tgz
+    ...
+  ...
 ```
 
 
+### Package Directories
 
-## Chart Submission Process
-1. Fork the [Rancher Partner Charts](https://github.com/rancher/partner-charts/) repository
-2. Clone your fork
-3. Ensure the 'main-source' branch is checked out
-4. Create subdirectories in **packages** in the form of *vendor/chart*
-5. Create your **upstream.yaml**
-6. Create any add-on files like your app-readme.md and questions.yaml in an 'overlay' subdirectory (Optional)
-6. Commit your packages directory
-7. Push your commit and open a pull request
+Each package has a package directory. Package directories are of the form
+`packages/<vendor>/<chart>/`, where `<vendor>` is the vendor that provides the chart
+and `<chart>` is the name of the chart. Taken together, `<vendor>/<chart>` is the full
+name used to refer to the package.
+
+Package directories must contain an [`upstream.yaml`](#upstreamyaml) file. Typically
+they also contain an `overlay/` directory that contains files that are copied into
+the chart directory when integrating new versions of the chart. `overlay/` is most
+often used for adding [`app-readme.md`](#app-readmemd) and
+[`questions.yaml`](#questionsyaml) files.
+
+
+## Example Workflow for Adding a Package
+
+These steps assume that the working directory is set to the root of
+the repository you want to operate on. They use the example
+`suse/kubewarden-controller` package in commands.
+
+#### 1. Create a directory for your package of the form `packages/<vendor>/<chart>`
 
 ```bash
-git clone -b main-source git@github.com:rancher/partner-charts.git
-cd partner-charts
 mkdir -p packages/suse/kubewarden-controller
-cat <<EOF > packages/suse/kubewarden-controller/upstream.yaml
----
-HelmRepo: https://charts.kubewarden.io
-HelmChart: kubewarden-controller
-Vendor: SUSE
-DisplayName: Kubewarden Controller
-ChartMetadata:
-  kubeVersion: '>=1.21-0'
-  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
-EOF
+```
 
+#### 2. Create an [`upstream.yaml`](#upstreamyaml) file in the package directory
+
+#### 3. Populate `overlay/`
+
+If you want any files to be added when chart versions are integrated into the repo,
+now is the time add them to `overlay/`.
+
+```bash
 mkdir packages/suse/kubewarden-controller/overlay
 echo "Example app-readme.md" > packages/suse/kubewarden-controller/overlay/app-readme.md
-
-git add packages/suse/kubewarden-controller
-git commit -m "Submitting suse/kubewarden-controller"
-git push origin main-source
-
-# Open Your Pull Request
 ```
 
-### Using the tool
-If you would like to test your configuration using this tool, simply run the provided script to download the tool. The 'auto' function is what will be run to generate new versions.
+#### 4. Run `partner-charts-ci update`
 
-The example below assumes we have already committed an **upstream.yaml** to **packages/suse/kubewarden-controller/upstream.yaml**
+`partner-charts-ci update` will download any new chart versions from upstream
+and integrate them into the repository. Append the `--commit` flag if you
+want `partner-charts-ci` to create a git commit containing these changes.
+The `PACKAGE` environment variable allows you to specify a package to operate
+on.
+
 ```bash
-git clone -b main-source git@github.com:rancher/partner-charts.git
-cd partner-charts
-scripts/pull-ci-scripts
-export PACKAGE=suse/kubewarden-controller
-bin/partner-charts-ci auto
+PACKAGE=suse/kubewarden-controller partner-charts-ci update --commit
 ```
 
-## Command Reference
-Some commands respect the `PACKAGE` environment variable. This can be used to specify a chart in the format as output by the `list` command, `<vendor>/<chart>`. This environment variable may also be set to just the top level `<vendor>` directory to apply to all charts contained within that vendor.
-| Command | Description |
-| ------------- | ------------- |
-| list | Lists all charts found with an **upstream.yaml** file in the `packages` directory. If `PACKAGE` environment variable is set, will only list chart(s) that match
-| prepare | Included for backwards-compatability. Prepares a copy of the chart in the chart's `packages` directory for modification via GNU patch
-| patch | Included for backwards-compatability. Generates patch files after alterations made following `prepare` command
-| clean | Included for backwards-compatability. Cleans chart created from `prepare` command
-| auto | Automated CI process. Checks all configured charts for updates in upstream, downloads updates, makes necessary alterations, stores chart assets, updates index, and commits changes. If `PACKAGE` environment variable is set, will only check and update specified chart(s)
-| stage | Does everything auto does except create the final commit. Useful for testing. If `PACKAGE` environment variable is set, will only check and updated specified chart(s)
-| unstage | Equivalent to running `git clean -d -f && git checkout -f .`
-| hide | Alters existing chart to add `catalog.cattle.io/hidden: "true"` annotation in index and assets. Accepts one chart name as argument, in the format as printed by `list`
-| [feature](#feature) | Alters existing chart to add, remove, or list charts with `catalog.cattle.io/featured` annotation
-| validate | Validates current repository against configured released repo in `configuration.yaml` to ensure released assets are not being modified
+#### 5. Validate your changes
 
-### Subcommands
-#### `feature`
-| Command | Arguments | Description |
-| ------------- | ------------- | ------------- |
-| list | N/A | Lists the current charts with the featured annotation and their associated index. Listed name is the chart name as listed in the `index.yaml`, not the chart name in the `<vendor>/<chart>` format
-| add | Accepts two arguemnts. The chart name in the format as printed by the standard `list` command, `<vendor>/<chart>`, and the index to be featured at (1-5) | Adds the `catalog.cattle.io/featured: <index>` annotaton to a given chart
-| remove | Accepts one chart name as argument, in the format as printed by the standard `list` command, `<vendor>/<chart>` | Removes the `catalog.cattle.io/featured` annotation from a given chart
+```bash
+partner-charts-ci validate
+```
 
-### Overlay
-Any files placed in the *packages/vendor/chart/overlay* directory will be overlayed onto the chart. This allows for adding or overwriting files within the chart as needed. The primary intended purpose is for adding the app-readme.md and questions.yaml files.
+#### 6. Test your chart by installing it in the Rancher UI
 
-### Configuration File
-
-The tool reads a configuration yaml, `upstream.yaml`, to know where to fetch the upstream chart. This file is also able to define any alterations for valid variables in the Chart.yaml as described by [Helm](https://helm.sh/docs/topics/charts/#the-chart-file-structure).
+1. Ensure that you have a fork of the
+[Rancher Partner Charts repository](https://github.com/rancher/partner-charts)
+in your personal Github account.
+2. Push your changes to your fork.
+3. In the Rancher UI, create a test repository that points to the branch you pushed
+your changes to in your fork. To do this, navigate to `Apps > Repositories` and
+click `Create`. Enter a name, the URL of your fork, and the branch containing your
+changes, and click `Create` again.
+4. Once the new repository is active, you should be able to find your chart
+in `Apps > Charts`. Check that the readme is correct, and then install your
+chart. It should install successfully.
 
 
-Options for `upstream.yaml`
+## File Reference
+
+### `upstream.yaml`
+
+`upstream.yaml` contains package configuration.
+
+> [!IMPORTANT]
+> In GKE clusters, a Helm Chart will NOT display in Rancher Apps unless
+> `kubeVersion` includes `-0` suffix in `Chart.yaml`. You can set it
+> through the `ChartMetadata.kubeVersion` field in the `upstream.yaml`
+> file.
+
 | Variable | Requires | Description |
 | ------------- | ------------- |------------- |
 | ArtifactHubPackage | ArtifactHubRepo | Defines the package to pull from the defined ArtifactHubRepo
 | ArtifactHubRepo | ArtifactHubPackage | Defines the repo to access on Artifact Hub
 | AutoInstall | | Allows setting a required additional chart to deploy prior to current chart, such as a dedicated CRDs chart
-| ChartMetadata | | Allows setting/overriding the value of any valid Chart.yaml variable
-| DisplayName | | Sets the name the chart will be listed under in the Rancher UI
+| ChartMetadata | | Allows setting/overriding the value of any valid [Chart.yaml variable](https://helm.sh/docs/topics/charts/#the-chartyaml-file)
+| Deprecated | | Whether the package is deprecated. Deprecated packages will not integrate any new chart versions from upstream. Do not set this field directly; instead, use `partner-charts-ci deprecate`.
+| DisplayName | | The name of the chart used in the Rancher UI
 | Experimental | | Adds the 'experimental' annotation which adds a flag on the UI entry
 | Fetch | HelmChart, HelmRepo | Selects set of charts to pull from upstream.<br />- **latest** will pull only the latest chart version *default*<br />- **newer** will pull all newer versions than currently stored<br />- **all** will pull all versions
 | GitBranch | GitRepo | Defines which branch to pull from the upstream GitRepo
@@ -195,40 +157,37 @@ Options for `upstream.yaml`
 | GitSubdirectory | GitRepo | Allows selection of a subdirectory of the upstream git repo to pull the chart from
 | HelmChart | HelmRepo | Defines which chart to pull from the upstream Helm repo
 | HelmRepo | HelmChart | Defines the upstream Helm repo to pull from
-| Hidden | | Adds the 'hidden' annotation which hides the chart from the Rancher UI
+| Hidden | | Adds the 'hidden' annotation which hides the chart from the Rancher UI. Do not set this field directly unless the package is new; instead, use `partner-charts-ci hide`.
 | Namespace | | Addes the 'namespace' annotation which hard-codes a deployment namespace for the chart
-| PackageVersion | | Used to generate new patch version of chart
+| PackageVersion | | **Deprecated**. Allows for creating multiple local chart versions from a single upstream chart version. Should not be added to any existing packages, nor should it be defined on any new packages.
 | ReleaseName | | Sets the value of the release-name Rancher annotation. Defaults to the chart name
-| Vendor | | Sets the vendor name providing the chart
+| Vendor | | The name of the vendor used in the Rancher UI
 
-### Helm Repo
+#### Example: Helm Repo
+
 ```yaml
----
 HelmRepo: https://charts.kubewarden.io
 HelmChart: kubewarden-controller
 Vendor: SUSE
 DisplayName: Kubewarden Controller
-Fetch: newer
 ChartMetadata:
   kubeVersion:  '>=1.21-0'
-  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 ```
 
-### Artifact Hub
+#### Example: Artifact Hub
+
 ```yaml
----
 ArtifactHubRepo: kubewarden
 ArtifactHubPackage: kubewarden-controller
 Vendor: SUSE
 DisplayName: Kubewarden Controller
 ChartMetadata:
   kubeVersion: '>=1.21-0'
-  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 ```
 
-### Git Repo
+#### Example: Git Repo
+
 ```yaml
----
 GitRepo: https://github.com/kubewarden/helm-charts.git
 GitBranch: main
 GitSubdirectory: charts/kubewarden-controller
@@ -236,12 +195,11 @@ Vendor: SUSE
 DisplayName: Kubewarden Controller
 ChartMetadata:
   kubeVersion: '>=1.21-0'
-  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 ```
 
-### GitHub Release
+#### Example: Github Release
+
 ```yaml
----
 GitRepo: https://github.com/kubewarden/helm-charts.git
 GitHubRelease: true
 GitSubdirectory: charts/kubewarden-controller
@@ -249,5 +207,93 @@ Vendor: SUSE
 DisplayName: Kubewarden Controller
 ChartMetadata:
   kubeVersion: '>=1.21-0'
-  icon: https://www.kubewarden.io/images/icon-kubewarden.svg
 ```
+
+
+### `app-readme.md`
+
+`app-readme.md` is a brief description of the app and how to use it. It
+is best to keep it short since the longer `README.md` in your chart will be
+displayed in the UI as detailed description.
+
+
+### `questions.yaml`
+
+`questions.yml` defines a set of questions to display on the chart's
+installation page. It allows users to answer them and configure the chart
+using the UI instead of modifying the chart's values file directly. You
+can find a reference for `questions.yaml`
+[here](https://docs.ranchermanager.rancher.io/how-to-guides/new-user-guides/helm-charts-in-rancher/create-apps#question-variable-reference).
+
+#### Example
+
+```yaml
+questions:
+- variable: password
+  default: ""
+  required: true
+  type: password
+  label: Admin Password
+  group: "Global Settings"
+- variable: service.type
+  default: "ClusterIP"
+  type: enum
+  group: "Service Settings"
+  options:
+    - "ClusterIP"
+    - "NodePort"
+    - "LoadBalancer"
+  required: true
+  label: Service Type
+  show_subquestion_if: "NodePort"
+  subquestions:
+  - variable: service.nodePort
+    default: ""
+    description: "NodePort port number (to set explicitly, choose port between 30000-32767)"
+    type: int
+    min: 30000
+    max: 32767
+    label: Service NodePort
+```
+
+
+## Other Information
+
+### Hidden Charts
+
+Hidden charts have packages with `Hidden: true` in their `upstream.yaml`. When
+`Hidden: true` is present in a package's `upstream.yaml`, `partner-charts-ci`
+ensures that all of its chart versions have the `catalog.cattle.io/hidden`
+annotation set. This annotation causes the Rancher UI to not show the chart.
+If you want to hide a chart, use the `partner-charts-ci hide` subcommand.
+Simply setting `Hidden: true` in `upstream.yaml` will not hide existing chart
+versions.
+
+
+### Featured Charts
+
+In the `Apps > Charts` view, the Rancher UI may have a set of tiles at the
+top featuring several charts. These are the "featured" charts. Charts that are
+featured have the `catalog.cattle.io/featured` annotation set on their latest
+chart version. This annotation is reserved for preferred partners that SUSE
+has agreed to highlight in the `Apps > Charts` marquee tiles. You can see and
+control featured charts using the `partner-charts-ci feature` subcommands.
+
+
+### Deprecating and Removing Packages
+
+When a package and its chart versions must be removed, it is typical to
+deprecate it for some time in order to give users time to migrate away
+from it. Packages are deprecated through the use of the
+`partner-charts-ci deprecate` subcommand. Deprecating a package has
+several effects:
+
+- any new chart versions from upstream are no longer integrated
+- the `upstream.yaml` file for the package has `Deprecated: true` set
+
+Once a package has been deprecated, it can be removed. This is done
+through the `partner-charts-ci remove` subcommand. Using this subcommand
+prevents maintainers from missing files when removing a package.
+It is possible to remove a package without first deprecating it by using
+the `--force` option, but please make sure you know what you're doing if
+you plan on doing this!
