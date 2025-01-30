@@ -22,25 +22,6 @@ func TestMain(t *testing.T) {
 				upstreamYaml.setDefaults()
 				assert.Equal(t, fetchValue, upstreamYaml.Fetch)
 			})
-
-			t.Run("should set ReleaseName field if not set", func(t *testing.T) {
-				helmChartValue := "helm-chart-value"
-				upstreamYaml := &UpstreamYaml{
-					HelmChart: helmChartValue,
-				}
-				upstreamYaml.setDefaults()
-				assert.Equal(t, helmChartValue, upstreamYaml.ReleaseName)
-			})
-
-			t.Run("should not change ReleaseName field if set", func(t *testing.T) {
-				releaseNameValue := "release-name-value"
-				upstreamYaml := &UpstreamYaml{
-					HelmChart:   "helm-chart-value",
-					ReleaseName: releaseNameValue,
-				}
-				upstreamYaml.setDefaults()
-				assert.Equal(t, releaseNameValue, upstreamYaml.ReleaseName)
-			})
 		})
 
 		t.Run("validate", func(t *testing.T) {

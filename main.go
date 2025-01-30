@@ -430,7 +430,11 @@ func addAnnotations(packageWrapper pkg.PackageWrapper, helmChart *chart.Chart) e
 
 	annotations[annotationDisplayName] = packageWrapper.DisplayName
 
-	annotations[annotationReleaseName] = packageWrapper.UpstreamYaml.ReleaseName
+	if packageWrapper.UpstreamYaml.ReleaseName != "" {
+		annotations[annotationReleaseName] = packageWrapper.UpstreamYaml.ReleaseName
+	} else {
+		annotations[annotationReleaseName] = packageWrapper.Name
+	}
 
 	if packageWrapper.UpstreamYaml.Namespace != "" {
 		annotations[annotationNamespace] = packageWrapper.UpstreamYaml.Namespace
