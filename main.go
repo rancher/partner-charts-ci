@@ -46,10 +46,11 @@ const (
 )
 
 var (
-	version    = "v0.0.0"
-	commit     = "HEAD"
-	force      = false
-	makeCommit = false
+	version         = "v0.0.0"
+	commit          = "HEAD"
+	force           = false
+	makeCommit      = false
+	modifyGenerated = false
 )
 
 // ChartWrapper is like a chart.Chart, but it tracks whether the chart
@@ -592,6 +593,16 @@ func writeIndex(paths p.Paths) error {
 		}
 	}
 
+	// Both human-created PRs and the nightly update may modify the
+	// `generated: ...` line of index.yaml. Because PRs often take more
+	// than 24 hours to review, which means the nightly update runs in
+	// the meantime, merge conflicts are very common and are a pain.
+	// We solve this by only modifying the line when the nightly update
+	// runs.
+	if !modifyGenerated {
+		newHelmIndexYaml.Generated = oldHelmIndexYaml.Generated
+	}
+
 	newHelmIndexYaml.SortEntries()
 
 	if err := newHelmIndexYaml.WriteFile(paths.IndexYaml, 0o644); err != nil {
@@ -1083,6 +1094,12 @@ func main() {
 					Aliases:     []string{"c"},
 					Usage:       "Commit any changes",
 					Destination: &makeCommit,
+				},
+				&cli.BoolFlag{
+					Name:        "modify-generated",
+					Aliases:     []string{"m"},
+					Usage:       `Update the "generated" line of index.yaml`,
+					Destination: &modifyGenerated,
 				},
 			},
 		},
