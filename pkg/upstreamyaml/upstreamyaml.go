@@ -48,10 +48,6 @@ func (upstreamYaml *UpstreamYaml) setDefaults() {
 	if upstreamYaml.Fetch == "" {
 		upstreamYaml.Fetch = "latest"
 	}
-
-	if upstreamYaml.ReleaseName == "" {
-		upstreamYaml.ReleaseName = upstreamYaml.HelmChart
-	}
 }
 
 func (upstreamYaml *UpstreamYaml) validate() error {

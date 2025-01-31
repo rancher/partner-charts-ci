@@ -182,7 +182,26 @@ func TestMain(t *testing.T) {
 			assert.Equal(t, displayName, value)
 		})
 
-		t.Run("should set release-name annotation properly", func(t *testing.T) {
+		t.Run("should set release-name annotation to package name when ReleaseName is not set", func(t *testing.T) {
+			packageName := "package-name"
+			packageWrapper := pkg.PackageWrapper{
+				Name:         packageName,
+				UpstreamYaml: &upstreamyaml.UpstreamYaml{},
+			}
+			helmChart := &chart.Chart{
+				Metadata: &chart.Metadata{
+					Dependencies: []*chart.Dependency{},
+				},
+			}
+			if err := addAnnotations(packageWrapper, helmChart); err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			value, ok := helmChart.Metadata.Annotations[annotationReleaseName]
+			assert.True(t, ok)
+			assert.Equal(t, packageName, value)
+		})
+
+		t.Run("should set release-name annotation to ReleaseName when ReleaseName is set", func(t *testing.T) {
 			releaseName := "Release Name"
 			packageWrapper := pkg.PackageWrapper{
 				UpstreamYaml: &upstreamyaml.UpstreamYaml{

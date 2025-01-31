@@ -24,7 +24,7 @@ func validateIndexYamlAndPackagesDirNamesMatch(paths p.Paths, _ ConfigurationYam
 func matchPackageNames(indexYaml *repo.IndexFile, packageWrappers []pkg.PackageWrapper) []error {
 	errors := make([]error, 0, len(packageWrappers))
 	indexYamlNames := map[string]bool{}
-	for chartName, _ := range indexYaml.Entries {
+	for chartName := range indexYaml.Entries {
 		indexYamlNames[chartName] = false
 	}
 	for _, packageWrapper := range packageWrappers {
