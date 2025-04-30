@@ -396,9 +396,15 @@ func applyOverlayFiles(overlayFiles map[string][]byte, helmChart *chart.Chart) e
 // icon file. We do this so that airgap installations of Rancher have access
 // to icons without needing to download them from a remote source.
 func ensureIcon(paths p.Paths, packageWrapper pkg.PackageWrapper, chartWrapper *ChartWrapper) error {
-	localIconPath, err := icons.EnsureIconDownloaded(paths, chartWrapper.Metadata.Icon, packageWrapper.Name)
+	localIconPath, err := icons.GetDownloadedIconPath(paths, packageWrapper.Name)
 	if err != nil {
-		return fmt.Errorf("failed to ensure icon downloaded: %w", err)
+		if chartWrapper.Metadata.Icon == "" {
+			return fmt.Errorf("chart does not define an icon, but an icon is required")
+		}
+		localIconPath, err = icons.DownloadIcon(paths, chartWrapper.Metadata.Icon, packageWrapper.Name)
+		if err != nil {
+			return fmt.Errorf("failed to ensure icon downloaded: %w", err)
+		}
 	}
 
 	localIconUrl := "file://" + localIconPath
