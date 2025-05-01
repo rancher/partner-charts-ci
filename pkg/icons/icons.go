@@ -30,14 +30,9 @@ func GetDownloadedIconPath(paths p.Paths, packageName string) (string, error) {
 	return "", fmt.Errorf("no icon found for package %q", packageName)
 }
 
-// EnsureIconDownloaded downloads the icon at iconUrl to the icon file path
-// for package packageName. If a file already exists at this path, the
-// download is skipped. Returns the path to the icon.
-func EnsureIconDownloaded(paths p.Paths, iconUrl, packageName string) (string, error) {
-	if localIconPath, err := GetDownloadedIconPath(paths, packageName); err == nil {
-		return localIconPath, nil
-	}
-
+// DownloadIcon downloads the icon at iconUrl to the icon file path
+// for package packageName. Returns the path to the icon.
+func DownloadIcon(paths p.Paths, iconUrl, packageName string) (string, error) {
 	resp, err := http.Get(iconUrl)
 	if err != nil {
 		return "", fmt.Errorf("failed to http get %q: %w", iconUrl, err)
