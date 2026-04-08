@@ -52,7 +52,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |-
-          goreleaser release --clean
+          goreleaser release --clean --draft
           if [[ ! -f dist/metadata.json ]] || [[ ! -s dist/metadata.json ]]; then
             echo "Missing required file: dist/metadata.json"
             exit 1
@@ -63,3 +63,7 @@ jobs:
           fi
           echo "metadata=$(tr -d '\n\r' < dist/metadata.json)" >> "${GITHUB_OUTPUT}"
           echo "artifacts=$(tr -d '\n\r' < dist/artifacts.json)" >> "${GITHUB_OUTPUT}"
+      - name: Publish Release
+        run: gh release edit "${GITHUB_REF_NAME}" --draft=false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
