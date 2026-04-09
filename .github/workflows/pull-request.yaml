@@ -10,7 +10,7 @@ jobs:
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: '1.23'
+          go-version: '1.26'
 
       - name: Run unit tests
         run: go test ./...
@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: '1.23'
+          go-version: '1.26'
 
       - name: Run linter
         uses: golangci/golangci-lint-action@38e1018663fa5173f3968ea0777460d3de38f256 # v5
@@ -36,7 +36,7 @@ jobs:
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: '1.23'
+          go-version: '1.26'
 
       - name: Test build of binaries
         uses: goreleaser/goreleaser-action@5742e2a039330cbb23ebf35f046f814d4c6ff811 # v5
