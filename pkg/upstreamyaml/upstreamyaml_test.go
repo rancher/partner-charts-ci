@@ -1,8 +1,9 @@
 package upstreamyaml
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(t *testing.T) {
@@ -49,7 +50,7 @@ func TestMain(t *testing.T) {
 					HelmRepo: "https://example.com",
 				}
 				err := upstreamYaml.validate()
-				assert.ErrorContains(t, err, "Fetch is latest but HelmChart is not set")
+				assert.ErrorContains(t, err, "fetch is latest but HelmChart is not set")
 			})
 
 			t.Run("if Fetch is not latest, HelmRepo must be set", func(t *testing.T) {
@@ -58,7 +59,7 @@ func TestMain(t *testing.T) {
 					HelmChart: "test-chart",
 				}
 				err := upstreamYaml.validate()
-				assert.ErrorContains(t, err, "Fetch is latest but HelmRepo is not set")
+				assert.ErrorContains(t, err, "fetch is latest but HelmRepo is not set")
 			})
 
 			t.Run("if GitBranch is set, GitRepo must be set", func(t *testing.T) {
