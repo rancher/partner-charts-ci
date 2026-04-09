@@ -40,7 +40,7 @@ func DownloadIcon(paths p.Paths, iconURL, packageName string) (localIconPath str
 	}
 
 	defer func() {
-		if closeErr := errors.Join(resp.Body.Close()); closeErr != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
 			err = errors.Join(err, closeErr)
 		}
 	}()

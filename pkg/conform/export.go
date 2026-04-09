@@ -24,11 +24,11 @@ func ExportChartDirectory(chart *chart.Chart, targetPath string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer func(dir string) {
-		if closeErr := errors.Join(os.RemoveAll(tempDir)); closeErr != nil {
+	defer func() {
+		if closeErr := os.RemoveAll(tempDir); closeErr != nil {
 			err = errors.Join(err, closeErr)
 		}
-	}(tempDir)
+	}()
 
 	tgzPath, err := chartutil.Save(chart, tempDir)
 	if err != nil {
@@ -73,21 +73,21 @@ func Gunzip(path string, outPath string) (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to open %q: %w", path, err)
 	}
-	defer func(f *os.File) {
-		if closeErr := errors.Join(f.Close()); closeErr != nil {
+	defer func() {
+		if closeErr := gzipFile.Close(); closeErr != nil {
 			err = errors.Join(err, closeErr)
 		}
-	}(gzipFile)
+	}()
 
 	gzipReader, err := gzip.NewReader(gzipFile)
 	if err != nil {
 		return err
 	}
-	defer func(r *gzip.Reader) {
-		if closeErr := errors.Join(r.Close()); closeErr != nil {
+	defer func() {
+		if closeErr := gzipReader.Close(); closeErr != nil {
 			err = errors.Join(err, closeErr)
 		}
-	}(gzipReader)
+	}()
 
 	tarReader := tar.NewReader(gzipReader)
 
@@ -115,11 +115,11 @@ func Gunzip(path string, outPath string) (err error) {
 			if err != nil {
 				return err
 			}
-			defer func(f *os.File) {
-				if closeErr := errors.Join(f.Close()); closeErr != nil {
+			defer func() {
+				if closeErr := f.Close(); closeErr != nil {
 					err = errors.Join(err, closeErr)
 				}
-			}(f)
+			}()
 
 			if _, err = io.Copy(f, tarReader); err != nil {
 				return err

@@ -40,12 +40,16 @@ func (directoryComparison *DirectoryComparison) Merge(newComparison DirectoryCom
 // versions have been modified outside of a few that must be allowed,
 // such as the deprecated field of Chart.yaml and Rancher-specific
 // annotations.
-func preventReleasedChartModifications(paths p.Paths, configYaml ConfigurationYaml) []error {
+func preventReleasedChartModifications(paths p.Paths, configYaml ConfigurationYaml) (errs []error) {
 	cloneDir, err := os.MkdirTemp("", "gitRepo")
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	defer os.RemoveAll(cloneDir)
+	defer func() {
+		if closeErr := os.RemoveAll(cloneDir); closeErr != nil {
+			errs = append(errs, fmt.Errorf("failed to remove temporary clone directory: %w", closeErr))
+		}
+	}()
 
 	err = cloneRepo(configYaml.ValidateUpstreams[0].URL, configYaml.ValidateUpstreams[0].Branch, cloneDir)
 	if err != nil {
@@ -62,11 +66,10 @@ func preventReleasedChartModifications(paths p.Paths, configYaml ConfigurationYa
 		return []error{fmt.Errorf("failed to compare directories: %w", err)}
 	}
 
-	errors := make([]error, 0, len(directoryComparison.Modified))
 	for _, modifiedFile := range directoryComparison.Modified {
-		errors = append(errors, fmt.Errorf("%s was modified", modifiedFile))
+		errs = append(errs, fmt.Errorf("%s was modified", modifiedFile))
 	}
-	return errors
+	return errs
 }
 
 func cloneRepo(url string, branch string, targetDir string) error {
@@ -86,21 +89,25 @@ func cloneRepo(url string, branch string, targetDir string) error {
 	return nil
 }
 
-func checksumFile(filePath string) (string, error) {
+func checksumFile(filePath string) (hash string, err error) {
 	f, err := os.Open(filePath)
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return "", err
 	}
 
-	hash := fmt.Sprintf("%x", h.Sum(nil))
+	hash = fmt.Sprintf("%x", h.Sum(nil))
 
-	return hash, nil
+	return hash, err
 }
 
 func compareDirectories(upstreamPath, updatePath string, skipDirs []string) (DirectoryComparison, error) {
@@ -197,12 +204,17 @@ func compareDirectories(upstreamPath, updatePath string, skipDirs []string) (Dir
 // to ignore certain changes, and exports it to a temporary chart directory.
 // The caller is responsible for removing the chart directory after they are
 // finished using it.
-func prepareTgzForComparison(tgzPath string) (string, error) {
+func prepareTgzForComparison(tgzPath string) (chartDirectory string, err error) {
 	upstreamFile, err := os.Open(tgzPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open file: %w", err)
 	}
-	defer upstreamFile.Close()
+
+	defer func() {
+		if closeErr := upstreamFile.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
 
 	upstreamChart, err := loader.LoadArchive(upstreamFile)
 	if err != nil {
@@ -219,7 +231,7 @@ func prepareTgzForComparison(tgzPath string) (string, error) {
 	// Do not consider changes to the Chart.yaml deprecated field
 	upstreamChart.Metadata.Deprecated = false
 
-	chartDirectory, err := os.MkdirTemp("", "partner-charts-ci-validate-")
+	chartDirectory, err = os.MkdirTemp("", "partner-charts-ci-validate-")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary directory: %w", err)
 	}
@@ -228,26 +240,36 @@ func prepareTgzForComparison(tgzPath string) (string, error) {
 		return "", fmt.Errorf("failed to export chart directory: %w", err)
 	}
 
-	return chartDirectory, nil
+	return chartDirectory, err
 }
 
-func matchHelmCharts(upstreamPath, updatePath string) (bool, error) {
+func matchHelmCharts(upstreamPath, updatePath string) (match bool, err error) {
 	upstreamChartDirectory, err := prepareTgzForComparison(upstreamPath)
 	if err != nil {
 		return false, fmt.Errorf("failed to prepare %s for comparison: %w", upstreamPath, err)
 	}
-	defer os.RemoveAll(upstreamChartDirectory)
+	defer func() {
+		if closeErr := os.RemoveAll(upstreamChartDirectory); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
 
 	updateChartDirectory, err := prepareTgzForComparison(updatePath)
 	if err != nil {
 		return false, fmt.Errorf("failed to prepare %s for comparison: %w", updatePath, err)
 	}
-	defer os.RemoveAll(updateChartDirectory)
+	defer func() {
+		if closeErr := os.RemoveAll(updateChartDirectory); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
 
 	directoryComparison, err := compareDirectories(upstreamChartDirectory, updateChartDirectory, []string{})
 	if err != nil {
 		return false, fmt.Errorf("failed to compare directories: %w", err)
 	}
 
-	return directoryComparison.Match(), err
+	match = directoryComparison.Match()
+
+	return match, err
 }

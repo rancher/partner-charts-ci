@@ -344,7 +344,7 @@ func LoadChartFromURL(url string) (chart *chart.Chart, err error) {
 	}
 
 	defer func() {
-		if closeErr := errors.Join(resp.Body.Close()); closeErr != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
 			err = errors.Join(err, closeErr)
 		}
 	}()

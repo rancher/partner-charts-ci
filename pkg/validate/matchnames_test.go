@@ -14,7 +14,7 @@ func generateIndex(t *testing.T) *repo.IndexFile {
 	t.Helper()
 	return &repo.IndexFile{
 		Entries: map[string]repo.ChartVersions{
-			"chart1": repo.ChartVersions{
+			"chart1": {
 				&repo.ChartVersion{
 					Metadata: &chart.Metadata{
 						Name:    "chart1",
@@ -23,7 +23,7 @@ func generateIndex(t *testing.T) *repo.IndexFile {
 					},
 				},
 			},
-			"chart2": repo.ChartVersions{
+			"chart2": {
 				&repo.ChartVersion{
 					Metadata: &chart.Metadata{
 						Name:    "chart2",
