@@ -1,4 +1,0 @@
-issues:
-  exclude-rules:
-    - linters: staticcheck
-      text: PackageVersion
