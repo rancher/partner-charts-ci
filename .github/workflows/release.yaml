@@ -13,6 +13,8 @@ jobs:
           fetch-depth: 0
       - name: Setup golang
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: 'go.mod'
       - name: Setup goreleaser
         shell: bash
         run: |-
