@@ -47,7 +47,7 @@ func preventReleasedChartModifications(paths p.Paths, configYaml ConfigurationYa
 	}
 	defer os.RemoveAll(cloneDir)
 
-	err = cloneRepo(configYaml.ValidateUpstreams[0].Url, configYaml.ValidateUpstreams[0].Branch, cloneDir)
+	err = cloneRepo(configYaml.ValidateUpstreams[0].URL, configYaml.ValidateUpstreams[0].Branch, cloneDir)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func compareDirectories(upstreamPath, updatePath string, skipDirs []string) (Dir
 	logrus.Debugf("Comparing directories %s and %s", upstreamPath, updatePath)
 	directoryComparison := DirectoryComparison{}
 	checkedSet := make(map[string]struct{})
-	var checked = struct{}{}
+	checked := struct{}{}
 
 	findRemovalAndModification := func(upstreamFilePath string, info os.FileInfo, err error) error {
 		if err != nil {

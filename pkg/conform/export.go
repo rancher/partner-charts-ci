@@ -3,6 +3,7 @@ package conform
 import (
 	"archive/tar"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,7 +14,7 @@ import (
 	"helm.sh/helm/v3/pkg/chartutil"
 )
 
-func ExportChartDirectory(chart *chart.Chart, targetPath string) error {
+func ExportChartDirectory(chart *chart.Chart, targetPath string) (err error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -23,7 +24,11 @@ func ExportChartDirectory(chart *chart.Chart, targetPath string) error {
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tempDir)
+	defer func(dir string) {
+		if closeErr := errors.Join(os.RemoveAll(tempDir)); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}(tempDir)
 
 	tgzPath, err := chartutil.Save(chart, tempDir)
 	if err != nil {
@@ -38,7 +43,7 @@ func ExportChartDirectory(chart *chart.Chart, targetPath string) error {
 	if err := os.RemoveAll(targetPath); err != nil {
 		return fmt.Errorf("failed to remove targetPath %q: %w", targetPath, err)
 	}
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create targetPath %q: %w", targetPath, err)
 	}
 
@@ -46,7 +51,7 @@ func ExportChartDirectory(chart *chart.Chart, targetPath string) error {
 		return fmt.Errorf("failed to move %q to %q: %w", chartOutputPath, targetPath, err)
 	}
 
-	return nil
+	return err
 }
 
 func stripRootPath(path string) string {
@@ -59,22 +64,30 @@ func stripRootPath(path string) string {
 	return filepath.FromSlash(newPath)
 }
 
-func Gunzip(path string, outPath string) error {
+func Gunzip(path string, outPath string) (err error) {
 	if !strings.HasSuffix(path, ".tgz") && !strings.HasPrefix(path, ".gz") {
-		return fmt.Errorf("Expecting file of type .gz or .tgz")
+		return fmt.Errorf("expecting file of type .gz or .tgz")
 	}
 
 	gzipFile, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("failed to open %q: %w", path, err)
 	}
-	defer gzipFile.Close()
+	defer func(f *os.File) {
+		if closeErr := errors.Join(f.Close()); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}(gzipFile)
 
 	gzipReader, err := gzip.NewReader(gzipFile)
 	if err != nil {
 		return err
 	}
-	defer gzipReader.Close()
+	defer func(r *gzip.Reader) {
+		if closeErr := errors.Join(r.Close()); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}(gzipReader)
 
 	tarReader := tar.NewReader(gzipReader)
 
@@ -89,7 +102,7 @@ func Gunzip(path string, outPath string) error {
 
 		filePath := filepath.Join(outPath, stripRootPath(h.Name))
 		parentPath := filepath.Dir(filePath)
-		if err := os.MkdirAll(parentPath, 0755); err != nil {
+		if err := os.MkdirAll(parentPath, 0o755); err != nil {
 			return fmt.Errorf("failed to mkdir %q: %w", parentPath, err)
 		}
 
@@ -102,7 +115,11 @@ func Gunzip(path string, outPath string) error {
 			if err != nil {
 				return err
 			}
-			defer f.Close()
+			defer func(f *os.File) {
+				if closeErr := errors.Join(f.Close()); closeErr != nil {
+					err = errors.Join(err, closeErr)
+				}
+			}(f)
 
 			if _, err = io.Copy(f, tarReader); err != nil {
 				return err
@@ -117,5 +134,5 @@ func Gunzip(path string, outPath string) error {
 
 	}
 
-	return nil
+	return err
 }

@@ -15,7 +15,7 @@ type ConfigurationYaml struct {
 }
 
 type validateUpstream struct {
-	Url    string
+	URL    string
 	Branch string
 }
 
@@ -26,7 +26,7 @@ func (configYaml ConfigurationYaml) Validate() error {
 	if configYaml.ValidateUpstreams[0].Branch == "" {
 		return errors.New("must provide branch in validation configuration")
 	}
-	if configYaml.ValidateUpstreams[0].Url == "" {
+	if configYaml.ValidateUpstreams[0].URL == "" {
 		return errors.New("must provide URL in validation configuration")
 	}
 	return nil

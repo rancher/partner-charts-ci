@@ -20,7 +20,7 @@ type UpstreamYaml struct {
 	ArtifactHubPackage string         `json:"ArtifactHubPackage,omitempty"`
 	ArtifactHubRepo    string         `json:"ArtifactHubRepo,omitempty"`
 	AutoInstall        string         `json:"AutoInstall,omitempty"`
-	ChartMetadata      chart.Metadata `json:"ChartMetadata,omitempty"`
+	ChartMetadata      chart.Metadata `json:"ChartMetadata"`
 	Deprecated         bool           `json:"Deprecated,omitempty"`
 	DisplayName        string         `json:"DisplayName,omitempty"`
 	Experimental       bool           `json:"Experimental,omitempty"`
@@ -52,10 +52,10 @@ func (upstreamYaml *UpstreamYaml) setDefaults() {
 
 func (upstreamYaml *UpstreamYaml) validate() error {
 	if upstreamYaml.Fetch != "latest" && upstreamYaml.HelmChart == "" {
-		return errors.New("Fetch is latest but HelmChart is not set")
+		return errors.New("fetch is latest but HelmChart is not set")
 	}
 	if upstreamYaml.Fetch != "latest" && upstreamYaml.HelmRepo == "" {
-		return errors.New("Fetch is latest but HelmRepo is not set")
+		return errors.New("fetch is latest but HelmRepo is not set")
 	}
 
 	if upstreamYaml.ArtifactHubPackage != "" && upstreamYaml.ArtifactHubRepo == "" {
