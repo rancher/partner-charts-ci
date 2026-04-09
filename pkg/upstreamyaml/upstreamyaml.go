@@ -82,9 +82,9 @@ func (upstreamYaml *UpstreamYaml) validate() error {
 		return errors.New("HelmRepo is set but HelmChart is not set")
 	}
 
-	if !(upstreamYaml.ArtifactHubPackage != "" && upstreamYaml.ArtifactHubRepo != "" ||
-		upstreamYaml.GitRepo != "" ||
-		upstreamYaml.HelmRepo != "" && upstreamYaml.HelmChart != "") {
+	if (upstreamYaml.ArtifactHubPackage == "" || upstreamYaml.ArtifactHubRepo == "") &&
+		upstreamYaml.GitRepo == "" &&
+		(upstreamYaml.HelmRepo == "" || upstreamYaml.HelmChart == "") {
 		return errors.New("must define upstream")
 	}
 
