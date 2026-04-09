@@ -1,6 +1,7 @@
 package icons
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,12 +33,18 @@ func GetDownloadedIconPath(paths p.Paths, packageName string) (string, error) {
 
 // DownloadIcon downloads the icon at iconUrl to the icon file path
 // for package packageName. Returns the path to the icon.
-func DownloadIcon(paths p.Paths, iconUrl, packageName string) (string, error) {
-	resp, err := http.Get(iconUrl)
+func DownloadIcon(paths p.Paths, iconURL, packageName string) (localIconPath string, err error) {
+	resp, err := http.Get(iconURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to http get %q: %w", iconUrl, err)
+		return "", fmt.Errorf("failed to http get %q: %w", iconURL, err)
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("got non-2xx status code on response: %s", resp.Status)
 	}
@@ -47,7 +54,7 @@ func DownloadIcon(paths p.Paths, iconUrl, packageName string) (string, error) {
 		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	ext := filepath.Ext(iconUrl)
+	ext := filepath.Ext(iconURL)
 	if ext == "" {
 		ext, err = getExtension(contents)
 		if err != nil {
@@ -55,12 +62,12 @@ func DownloadIcon(paths p.Paths, iconUrl, packageName string) (string, error) {
 		}
 	}
 
-	localIconPath := filepath.Join(paths.Icons, packageName+ext)
+	localIconPath = filepath.Join(paths.Icons, packageName+ext)
 	if err := os.WriteFile(localIconPath, contents, 0o644); err != nil {
 		return "", fmt.Errorf("failed to write response to file: %w", err)
 	}
 
-	return localIconPath, nil
+	return localIconPath, err
 }
 
 func getExtension(data []byte) (string, error) {

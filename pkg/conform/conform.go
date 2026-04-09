@@ -70,7 +70,6 @@ func OverlayChartMetadata(helmChart *chart.Chart, overlay chart.Metadata) {
 	if overlay.Type != "" {
 		helmChart.Metadata.Type = overlay.Type
 	}
-
 }
 
 func AnnotateChart(helmChart *chart.Chart, annotation, value string, override bool) bool {
@@ -126,7 +125,6 @@ func ApplyChartAnnotations(helmChart *chart.Chart, annotations map[string]string
 	}
 
 	return modified
-
 }
 
 func StripPackageVersion(chartVersion string) string {

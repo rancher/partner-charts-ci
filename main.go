@@ -39,7 +39,7 @@ const (
 	annotationKubeVersion  = "catalog.cattle.io/kube-version"
 	annotationNamespace    = "catalog.cattle.io/namespace"
 	annotationReleaseName  = "catalog.cattle.io/release-name"
-	//packageEnvVariable sets the environment variable to check for a package name
+	// packageEnvVariable sets the environment variable to check for a package name
 	packageEnvVariable = "PACKAGE"
 	featuredMax        = 5
 	upstreamYamlFile   = "upstream.yaml"
@@ -196,7 +196,7 @@ func ApplyUpdates(paths p.Paths, packageWrapper pkg.PackageWrapper) error {
 		if packageWrapper.SourceMetadata.Source == "Git" {
 			newChart, err = fetcher.LoadChartFromGit(chartVersion.URLs[0], packageWrapper.SourceMetadata.SubDirectory, packageWrapper.SourceMetadata.Commit)
 		} else {
-			newChart, err = fetcher.LoadChartFromUrl(chartVersion.URLs[0])
+			newChart, err = fetcher.LoadChartFromURL(chartVersion.URLs[0])
 		}
 		if err != nil {
 			return fmt.Errorf("failed to fetch chart: %w", err)
@@ -305,8 +305,8 @@ func loadExistingCharts(paths p.Paths, vendor string, packageName string) ([]*Ch
 		existingChartWrappers = append(existingChartWrappers, existingChartWrapper)
 	}
 	slices.SortFunc(existingChartWrappers, func(a, b *ChartWrapper) int {
-		parsedA := semver.MustParse(a.Chart.Metadata.Version)
-		parsedB := semver.MustParse(b.Chart.Metadata.Version)
+		parsedA := semver.MustParse(a.Metadata.Version)
+		parsedB := semver.MustParse(b.Metadata.Version)
 		return parsedB.Compare(parsedA)
 	})
 	return existingChartWrappers, nil
@@ -407,9 +407,9 @@ func ensureIcon(paths p.Paths, packageWrapper pkg.PackageWrapper, chartWrapper *
 		}
 	}
 
-	localIconUrl := "file://" + localIconPath
-	if chartWrapper.Metadata.Icon != localIconUrl {
-		chartWrapper.Metadata.Icon = localIconUrl
+	localIconURL := "file://" + localIconPath
+	if chartWrapper.Metadata.Icon != localIconURL {
+		chartWrapper.Metadata.Icon = localIconURL
 		chartWrapper.Modified = true
 	}
 
@@ -453,7 +453,7 @@ func addAnnotations(packageWrapper pkg.PackageWrapper, helmChart *chart.Chart) e
 		annotations[annotationKubeVersion] = helmChart.Metadata.KubeVersion
 	}
 
-	if packageVersion := packageWrapper.UpstreamYaml.PackageVersion; packageVersion != 0 {
+	if packageVersion := packageWrapper.UpstreamYaml.PackageVersion; packageVersion != 0 { //nolint:all
 		generatedVersion, err := conform.GeneratePackageVersion(helmChart.Metadata.Version, &packageVersion)
 		helmChart.Metadata.Version = generatedVersion
 		if err != nil {
@@ -649,7 +649,7 @@ func addFeaturedChart(c *cli.Context) error {
 		return fmt.Errorf("failed to parse given index %q: %w", inputIndex, err)
 	}
 	if featuredNumber < 1 || featuredNumber > featuredMax {
-		return fmt.Errorf("featured number must be between %d and %d\n", 1, featuredMax)
+		return fmt.Errorf("featured number must be between %d and %d", 1, featuredMax)
 	}
 
 	paths, err := p.GetPaths()

@@ -45,33 +45,33 @@ type PackageWrapper struct {
 	Vendor string
 }
 
-func (packageWrapper *PackageWrapper) FullName() string {
-	return packageWrapper.Vendor + "/" + packageWrapper.Name
+func (pw *PackageWrapper) FullName() string {
+	return pw.Vendor + "/" + pw.Name
 }
 
-// Populates PackageWrapper with relevant data from upstream and
+// Populate PackageWrapper with relevant data from upstream and
 // checks for updates. Returns true if newer package version is
 // available.
-func (packageWrapper *PackageWrapper) Populate(paths p.Paths) (bool, error) {
-	sourceMetadata, err := fetcher.FetchUpstream(*packageWrapper.UpstreamYaml)
+func (pw *PackageWrapper) Populate(paths p.Paths) (bool, error) {
+	sourceMetadata, err := fetcher.FetchUpstream(*pw.UpstreamYaml)
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch data from upstream: %w", err)
 	}
-	if sourceMetadata.Versions[0].Name != packageWrapper.Name {
-		logrus.Warnf("upstream name %q does not match package name %q", sourceMetadata.Versions[0].Name, packageWrapper.Name)
+	if sourceMetadata.Versions[0].Name != pw.Name {
+		logrus.Warnf("upstream name %q does not match package name %q", sourceMetadata.Versions[0].Name, pw.Name)
 	}
-	packageWrapper.SourceMetadata = &sourceMetadata
+	pw.SourceMetadata = &sourceMetadata
 
-	packageWrapper.FetchVersions, err = filterVersions(
+	pw.FetchVersions, err = filterVersions(
 		paths,
-		packageWrapper.SourceMetadata.Versions,
-		packageWrapper.UpstreamYaml.Fetch,
+		pw.SourceMetadata.Versions,
+		pw.UpstreamYaml.Fetch,
 	)
 	if err != nil {
 		return false, err
 	}
 
-	if len(packageWrapper.FetchVersions) == 0 {
+	if len(pw.FetchVersions) == 0 {
 		return false, nil
 	}
 
@@ -176,7 +176,7 @@ func filterVersions(paths p.Paths, upstreamVersions repo.ChartVersions, fetch st
 	logrus.Debugf("Filtering versions for %s\n", upstreamVersions[0].Name)
 	upstreamVersions = stripPreRelease(upstreamVersions)
 	if len(upstreamVersions) == 0 {
-		err := fmt.Errorf("No versions available in upstream or all versions are marked pre-release")
+		err := fmt.Errorf("no versions available in upstream or all versions are marked pre-release")
 		return repo.ChartVersions{}, err
 	}
 	allStoredVersions, err := getStoredVersions(paths, upstreamVersions[0].Name)
