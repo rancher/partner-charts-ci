@@ -453,7 +453,7 @@ func addAnnotations(packageWrapper pkg.PackageWrapper, helmChart *chart.Chart) e
 		annotations[annotationKubeVersion] = helmChart.Metadata.KubeVersion
 	}
 
-	if packageVersion := packageWrapper.UpstreamYaml.PackageVersion; packageVersion != 0 {
+	if packageVersion := packageWrapper.UpstreamYaml.PackageVersion; packageVersion != 0 { //nolint:all
 		generatedVersion, err := conform.GeneratePackageVersion(helmChart.Metadata.Version, &packageVersion)
 		helmChart.Metadata.Version = generatedVersion
 		if err != nil {
