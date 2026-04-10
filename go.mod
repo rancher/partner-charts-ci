@@ -7,7 +7,7 @@ require (
 	github.com/go-git/go-git/v5 v5.17.2
 	github.com/google/go-github/v84 v84.0.0
 	github.com/sirupsen/logrus v1.9.4
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
 	helm.sh/helm/v3 v3.18.5
 	sigs.k8s.io/yaml v1.5.0
